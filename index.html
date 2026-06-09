@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GeoViagens · Geometrisa</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+<!-- ============================================================
+     HEADER / NAVIGATION
+     ============================================================ -->
+<header id="app-header">
+
+  <!-- Logo + brand -->
+  <img src="assets/img/logo.png" alt="Geometrisa" class="header-logo" onerror="this.style.display='none'">
+  <span class="header-logo-text">GeoViagens</span>
+
+  <!-- Calendários dropdown -->
+  <div class="nav-item dropdown">
+    <button class="nav-btn" title="Calendários">
+      Calendários ▾
+    </button>
+    <div class="dropdown-menu">
+      <button class="dropdown-item" data-view="calendar-viagens">📅 Viagens</button>
+      <button class="dropdown-item" data-view="calendar-equipe">👥 Equipe</button>
+      <button class="dropdown-item" data-view="timeline">📊 Linha do Tempo</button>
+    </div>
+  </div>
+
+  <!-- Viagens -->
+  <div class="nav-item">
+    <button class="nav-btn" data-view="viagens">
+      Viagens <span class="badge" id="nav-badge-viagens" style="display:none">0</span>
+    </button>
+  </div>
+
+  <!-- Equipe -->
+  <div class="nav-item">
+    <button class="nav-btn" data-view="equipe">Equipe</button>
+  </div>
+
+  <!-- Resumo -->
+  <div class="nav-item">
+    <button class="nav-btn" data-view="resumo">Resumo</button>
+  </div>
+
+  <!-- Cadastros dropdown -->
+  <div class="nav-item dropdown">
+    <button class="nav-btn">Cadastros ▾</button>
+    <div class="dropdown-menu">
+      <button class="dropdown-item" data-view="empreendedores">🏗️ Empreendedores</button>
+      <button class="dropdown-item" data-view="atividades">🔧 Atividades</button>
+    </div>
+  </div>
+
+  <!-- Configurações -->
+  <div class="nav-item">
+    <button class="nav-btn" data-view="configuracoes">⚙️ Configurações</button>
+  </div>
+
+  <div class="nav-spacer"></div>
+
+  <!-- Admin (disabled v01) -->
+  <div class="nav-item nav-admin">
+    <button class="nav-btn" disabled title="Disponível em breve">Admin</button>
+  </div>
+
+</header>
+
+<!-- ============================================================
+     MAIN CONTENT AREA
+     ============================================================ -->
+<main id="app-main">
+
+  <!-- RESUMO -->
+  <div id="view-resumo" class="view"></div>
+
+  <!-- VIAGENS -->
+  <div id="view-viagens" class="view"></div>
+
+  <!-- EQUIPE -->
+  <div id="view-equipe" class="view"></div>
+
+  <!-- CALENDÁRIO DE VIAGENS -->
+  <div id="view-calendar-viagens" class="view"></div>
+
+  <!-- CALENDÁRIO DE EQUIPE -->
+  <div id="view-calendar-equipe" class="view"></div>
+
+  <!-- LINHA DO TEMPO (Gantt) -->
+  <div id="view-timeline" class="view"></div>
+
+  <!-- CADASTROS — EMPREENDEDORES -->
+  <div id="view-empreendedores" class="view"></div>
+
+  <!-- CADASTROS — ATIVIDADES -->
+  <div id="view-atividades" class="view"></div>
+
+  <!-- CONFIGURAÇÕES -->
+  <div id="view-configuracoes" class="view"></div>
+
+</main>
+
+<!-- ============================================================
+     DETAIL PANEL (slide from right)
+     ============================================================ -->
+<div id="detail-panel">
+  <div class="panel-header">
+    <h3 id="detail-panel-title">Detalhes</h3>
+    <button class="panel-close" onclick="closeDetailPanel()" title="Fechar (ESC)">✕</button>
+  </div>
+  <div class="panel-tabs" id="detail-panel-tabs"></div>
+  <div class="panel-body" id="detail-panel-body"></div>
+</div>
+
+<!-- ============================================================
+     VIAGEM MODAL (Create / Edit)
+     ============================================================ -->
+<div id="viagem-modal-overlay" class="modal-overlay hidden">
+  <div class="modal-box" style="width:760px">
+    <div class="modal-header">
+      <h2>Nova Viagem</h2>
+      <button class="modal-close" onclick="closeViagemModal()">✕</button>
+    </div>
+    <div class="modal-body" id="viagem-modal-body">
+      <!-- Rendered by forms.js -->
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeViagemModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveViagemDraft()">💾 Salvar Viagem</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     AVAILABILITY MODAL (FAB)
+     ============================================================ -->
+<div id="availability-modal-overlay" class="modal-overlay hidden">
+  <div class="modal-box" style="width:480px">
+    <div class="modal-header">
+      <h2>👥 Quem está disponível?</h2>
+      <button class="modal-close" onclick="closeAvailabilityModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Data início</label>
+          <input type="date" class="form-control" id="av-date-start">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Data fim</label>
+          <input type="date" class="form-control" id="av-date-end">
+        </div>
+        <div style="display:flex;align-items:flex-end;margin-bottom:14px">
+          <button class="btn btn-primary btn-sm" onclick="searchAvailability()">Buscar</button>
+        </div>
+      </div>
+      <div id="av-results" style="max-height:340px;overflow-y:auto"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     CONFIRM DIALOG
+     ============================================================ -->
+<div id="confirm-overlay" class="modal-overlay hidden">
+  <div class="modal-box confirm-dialog">
+    <div class="modal-header">
+      <h2 class="confirm-title">Confirmar</h2>
+    </div>
+    <div class="modal-body">
+      <div class="confirm-body"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost confirm-cancel-btn">Cancelar</button>
+      <button class="btn btn-primary confirm-ok-btn">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SEARCH OVERLAY (Ctrl+F)
+     ============================================================ -->
+<div id="search-overlay">
+  <input type="text" id="search-input" placeholder="Buscar barragem, colaborador, empreendedor..." autocomplete="off">
+  <div class="search-results" id="search-results"></div>
+  <div style="font-size:10px;color:#aaa;margin-top:4px;text-align:right">ESC para fechar</div>
+</div>
+
+<!-- ============================================================
+     FLOATING ACTION BUTTON
+     ============================================================ -->
+<button id="fab-disponivel" title="Quem está disponível?">👥</button>
+
+<!-- ============================================================
+     PRESENTATION MODE EXIT BUTTON
+     ============================================================ -->
+<button class="presentation-exit" onclick="exitPresentationMode()">✕ Sair da apresentação (ESC)</button>
+
+<!-- ============================================================
+     SCRIPTS — load order matters
+     ============================================================ -->
+<script src="assets/js/data.js"></script>
+<script src="assets/js/utils.js"></script>
+<script src="assets/js/calendar.js"></script>
+<script src="assets/js/timeline.js"></script>
+<script src="assets/js/forms.js"></script>
+<script src="assets/js/views.js"></script>
+<script src="assets/js/app.js"></script>
+
+</body>
+</html>
