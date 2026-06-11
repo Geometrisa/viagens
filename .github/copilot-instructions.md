@@ -249,10 +249,10 @@ A UI (`views.js`, `forms.js`, `calendar.js`, etc.) **não muda**.
 - [x] Criar `.gitignore`, `.gitattributes`, `README.md`
 - [x] Criar workflow `.github/workflows/deploy.yml` (GitHub Actions → GitHub Pages)
 - [x] Commit inicial: `feat: v01 completo — GeoViagens Geometrisa`
-- [ ] Criar repositório `viagens` na organização `geometrisa` no GitHub (**pendente — TI**)
-- [ ] `git remote add origin https://github.com/geometrisa/viagens.git && git push -u origin main`
-- [ ] No GitHub: **Settings → Pages → Source = GitHub Actions**
-- [ ] Validar deploy em `https://geometrisa.github.io/viagens/`
+- [x] Criar repositório `viagens` na organização `geometrisa` no GitHub (**pendente — TI**)
+- [x] `git remote add origin https://github.com/geometrisa/viagens.git && git push -u origin main`
+- [x] No GitHub: **Settings → Pages → Source = GitHub Actions**
+- [x] Validar deploy em `https://geometrisa.github.io/viagens/`
 
 #### Fase 2 — Autenticação Microsoft SSO
 
