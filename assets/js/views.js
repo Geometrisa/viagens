@@ -1435,10 +1435,10 @@ function renderConfiguracoes(){
         v=>{db.data.configuracoes.feriados.nacionais=v;markSettingsDirty();}) },
   ], '<p style="font-size:11px;color:#888;margin-top:4px">Feriados estaduais: fora do escopo v01.</p>'));
 
-  // Section: Senha (disabled in v01)
-  const senhaSection=buildSettingsSection('Autenticação',[]);
-  senhaSection.innerHTML+=`<p style="font-size:12px;color:#aaa;font-style:italic">Disponível na v02 — login, Microsoft SSO, permissões de admin.</p>`;
-  page.appendChild(senhaSection);
+  // Section: Authentication
+  const authSection=buildSettingsSection('Autenticação',[]);
+  authSection.innerHTML+=`<p style="font-size:12px;color:#666">Acesso protegido pelo Supabase Auth. Use o botão "Sair" no cabeçalho para encerrar a sessão.</p>`;
+  page.appendChild(authSection);
 
   // Section: Backup
   page.appendChild(buildBackupSection());

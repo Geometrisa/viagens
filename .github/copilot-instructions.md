@@ -2,14 +2,14 @@
 
 ## Visão Geral
 
-SPA de gerenciamento de viagens de campo da Geometrisa (inspeções em barragens/UHEs). Vanilla JS puro, sem framework, sem bundler, sem npm. Para executar: abra `index.html` diretamente no navegador.
+SPA de gerenciamento de viagens de campo da Geometrisa (inspeções em barragens/UHEs). Vanilla JS puro, sem framework, sem bundler, sem npm. Para executar localmente, use um servidor HTTP, por exemplo `python -m http.server 8080`.
 
 ## Arquitetura e Ordem de Carregamento
 
 Os scripts devem ser carregados nesta ordem (já definida no `index.html`):
 
 ```
-data.js → utils.js → calendar.js → timeline.js → forms.js → views.js → app.js
+Supabase SDK → supabase-config.js → auth.js → data.js → utils.js → calendar.js → timeline.js → forms.js → views.js → app.js
 ```
 
 Qualquer novo módulo deve ser inserido respeitando dependências (ex.: não usar `db` antes de `data.js`).
@@ -18,6 +18,8 @@ Qualquer novo módulo deve ser inserido respeitando dependências (ex.: não usa
 
 | Arquivo       | Responsabilidade                                                          |
 | ------------- | ------------------------------------------------------------------------- |
+| `supabase-config.js` | URL e chave pública do Supabase                                    |
+| `auth.js`     | Cliente Supabase, sessão, login e logout                                  |
 | `data.js`     | Classe `Database` + instância global `db`; persistência em `localStorage` |
 | `app.js`      | Objeto `App` (orquestrador); navegação, search, toasts, confirm dialog    |
 | `utils.js`    | Datas, feriados, detecção de conflitos, sugestão de sigla                 |
@@ -199,95 +201,52 @@ Referência numerada dos itens solicitados pelo cliente. Usar estes números ao 
 
 ## Escopo v01 vs v02
 
-**v01 (atual):** Sem login, dados em `localStorage`, hospedagem GitHub Pages. Botão "Admin" visível mas desabilitado (`disabled` + tooltip "Disponível em breve").
+**Estado atual:** Supabase Auth implementado; dados ainda em `localStorage` até a etapa de persistência.
 
-**v02 (futuro):** Login Microsoft SSO, banco SharePoint, domínio `viagens.geometrisa.com.br`, mobile, notificações por e-mail, templates recorrentes. **Não implementar recursos de v02 no código atual.**
+**v02 (próxima etapa):** Login único com Supabase Auth e persistência PostgreSQL protegida por RLS.
 
-## Roadmap v02 — Colocar em Produção
+## Roadmap v02 — Supabase
 
 ### Stack escolhida
 
-| Camada         | Tecnologia                                      | Motivo                                       |
-| -------------- | ----------------------------------------------- | -------------------------------------------- |
-| Frontend       | Vanilla JS (atual) + MSAL.js                    | Sem reescrita; apenas adicionar autenticação |
-| Autenticação   | Microsoft Entra ID (Azure AD) + MSAL.js browser | SSO corporativo com conta Geometrisa         |
-| Banco de dados | SharePoint Lists via Microsoft Graph API        | Já incluído no M365; sem custo extra         |
-| Hospedagem     | Azure Static Web Apps (free tier)               | HTTPS, domínio customizado, CI/CD via GitHub |
-| Domínio        | `viagens.geometrisa.com.br`                     | CNAME → Static Web App                       |
+| Camada | Tecnologia |
+| --- | --- |
+| Frontend | Vanilla JS atual |
+| Autenticação | Supabase Auth com email e senha |
+| Persistência | Supabase PostgreSQL, uma linha `jsonb` |
+| Autorização | Row Level Security vinculada ao UUID do usuário único |
+| Cache local | `localStorage` |
+| Hospedagem | GitHub Pages ou outra hospedagem estática |
 
-### Pré-requisitos (responsabilidade TI Geometrisa)
+### Decisões obrigatórias
 
-1. Conta Azure ativa vinculada ao tenant da Geometrisa (`geometrisa.com.br`)
-2. Registro de aplicativo no **Azure Entra ID** (App Registration):
-   - Tipo: SPA (Single Page Application)
-   - Redirect URI: `https://viagens.geometrisa.com.br`
-   - Permissões: `User.Read`, `Sites.ReadWrite.All`
-   - Gerar e anotar: `clientId` e `tenantId`
-3. Site SharePoint dedicado (ex.: `geometrisa.sharepoint.com/sites/geoviagens`)
-4. Criar 5 **SharePoint Lists** (equivalentes às coleções do modelo atual):
-   - `GV_Viagens`, `GV_Colaboradores`, `GV_Empreendedores`, `GV_Barragens`, `GV_Atividades`
-   - Cada lista com colunas mapeadas para os campos do modelo de dados
+- Criar somente um usuário operacional e desativar novos cadastros.
+- Esse usuário terá CRUD completo.
+- Não colocar senha, `service_role` ou chave secreta no frontend.
+- Usar somente chave pública com RLS.
+- Persistir inicialmente o objeto completo de `db.data` em `public.geoviagens_state`.
+- Manter IDs atuais (`V01`, `c1`, `e1`, `b1`, `a1`, `p1`).
+- Preservar os helpers da classe `Database`.
+- Tornar `App.init()` e a persistência assíncronos.
+- Serializar gravações e usar a coluna `revision` para detectar conflitos.
+- Usar cache offline apenas para leitura na primeira versão.
+- Não criar `data-v2.js` permanente; deve existir uma única implementação ativa.
 
-### Arquitetura de migração do `data.js`
+### Ordem de implementação
 
-A classe `Database` é o único ponto de acoplamento com `localStorage`. A estratégia é criar `data-v2.js` com a mesma interface pública, substituindo apenas as chamadas de persistência:
+1. [x] Criar projeto, usuário único, tabela, grants e policies RLS.
+2. [x] Adicionar SDK fixado e configuração pública.
+3. [x] Implementar `auth.js`, tela de login, sessão e logout.
+4. Converter `App.init()` para fluxo assíncrono.
+5. Adaptar `Database` para Supabase, cache, fila e revisão.
+6. Migrar o JSON local oficial.
+7. Testar todos os CRUDs, reload, rede indisponível e conflito entre abas.
+8. Confirmar que um segundo usuário autenticado não possui acesso.
 
+### Instrução detalhada
+
+Antes de implementar v02, ler integralmente:
+
+```text
+docs/supabase-integration.md
 ```
-localStorage.getItem/setItem  →  Graph API (SharePoint Lists)
-db.save()                     →  PATCH /sites/{id}/lists/{id}/items/{id}
-db.saveViagem()               →  POST ou PATCH conforme existência
-db.load()                     →  GET /sites/{id}/lists/{id}/items?$expand=fields
-```
-
-A UI (`views.js`, `forms.js`, `calendar.js`, etc.) **não muda**.
-
-### Plano de implementação por fase
-
-#### Fase 1 — Hospedagem estática (sem banco ainda)
-
-- [x] Criar repositório local git (`git init`, branch `main`)
-- [x] Criar `.gitignore`, `.gitattributes`, `README.md`
-- [x] Criar workflow `.github/workflows/deploy.yml` (GitHub Actions → GitHub Pages)
-- [x] Commit inicial: `feat: v01 completo — GeoViagens Geometrisa`
-- [x] Criar repositório `viagens` na organização `geometrisa` no GitHub (**pendente — TI**)
-- [x] `git remote add origin https://github.com/geometrisa/viagens.git && git push -u origin main`
-- [x] No GitHub: **Settings → Pages → Source = GitHub Actions**
-- [x] Validar deploy em `https://geometrisa.github.io/viagens/`
-
-#### Fase 2 — Autenticação Microsoft SSO
-
-- [ ] Adicionar `msal-browser.min.js` via CDN no `index.html` (sem npm)
-- [ ] Criar `auth.js` com `PublicClientApplication` (clientId, tenantId, redirectUri)
-- [ ] Em `App.init()`: checar se usuário está autenticado antes de renderizar
-- [ ] Exibir tela de login se não autenticado (`loginPopup()` ou `loginRedirect()`)
-- [ ] Guardar `accessToken` em memória para chamadas Graph API
-- [ ] Exibir nome/foto do usuário no header (substituir botão Admin)
-
-#### Fase 3 — Banco SharePoint (Microsoft Graph API)
-
-- [ ] Criar `data-v2.js` com mesma interface de `data.js`
-- [ ] Implementar `load()`: buscar todos os itens das 5 listas em paralelo (`Promise.all`)
-- [ ] Implementar `save()` / `saveViagem()`: upsert via Graph API com `If-Match` otimista
-- [ ] Manter backup local em `localStorage` como cache offline (fallback se Graph falhar)
-- [ ] Tratar conflitos de concorrência (múltiplos usuários editando)
-
-#### Fase 4 — Papéis de usuário
-
-- [ ] Lógica no `auth.js`: checar grupo Entra ID (`GeoViagens-Admin` vs `GeoViagens-Viewer`)
-- [ ] `Admin`: pode criar/editar/deletar tudo
-- [ ] `Viewer`: somente leitura + exportar PDF
-- [ ] Habilitar botão "Admin" no header para administradores
-
-#### Fase 5 — Mobile e notificações (opcional v02+)
-
-- [ ] CSS responsivo (breakpoints mobile no `styles.css`)
-- [ ] Notificações por e-mail via Microsoft Graph (envio de e-mail) ou Logic Apps
-- [ ] Templates de viagem recorrente
-
-### Decisões de design importantes para v02
-
-- **IDs**: migrar de `V01`, `c1`, `p1` para GUIDs (SharePoint gera automaticamente)
-- **Concorrência**: dois usuários editando a mesma viagem → usar `eTag` do SharePoint para detectar conflito
-- **Carregamento inicial**: com Graph API haverá latência; adicionar skeleton/loading state na tela de Resumo
-- **CORS**: Graph API aceita chamadas direto do browser com token MSAL; sem backend necessário
-- **Offline**: manter `localStorage` como cache de leitura; writes vão para Graph + atualizam cache local

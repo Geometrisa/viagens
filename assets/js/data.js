@@ -303,6 +303,10 @@ class Database {
     return this._data;
   }
 
+  clearMemory() {
+    this._data = null;
+  }
+
   save() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this._data));

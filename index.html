@@ -13,7 +13,40 @@
   <link rel="stylesheet" href="assets/css/styles.css">
 </head>
 
-<body>
+<body class="auth-loading">
+
+  <!-- ============================================================
+     AUTHENTICATION
+     ============================================================ -->
+  <div id="auth-loading-screen" class="auth-screen" aria-live="polite">
+    <div class="auth-loading-content">
+      <div class="auth-spinner" aria-hidden="true"></div>
+      <p>Verificando sessão...</p>
+    </div>
+  </div>
+
+  <section id="auth-login-screen" class="auth-screen hidden" aria-labelledby="auth-login-title">
+    <div class="auth-card">
+      <img src="assets/img/logo.png" alt="Geometrisa" class="auth-logo">
+      <div class="auth-brand">GeoViagens</div>
+      <h1 id="auth-login-title">Acesso ao sistema</h1>
+      <p class="auth-description">Entre com o usuário autorizado para continuar.</p>
+
+      <form id="auth-login-form" class="auth-form" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="auth-email">Email</label>
+          <input class="form-control" id="auth-email" name="email" type="email" autocomplete="username" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="auth-password">Senha</label>
+          <input class="form-control" id="auth-password" name="password" type="password"
+            autocomplete="current-password" required>
+        </div>
+        <p id="auth-login-error" class="auth-error" role="alert" aria-live="polite"></p>
+        <button id="auth-login-btn" class="btn btn-primary auth-submit" type="submit">Entrar</button>
+      </form>
+    </div>
+  </section>
 
   <!-- ============================================================
      HEADER / NAVIGATION
@@ -69,9 +102,10 @@
 
     <div class="nav-spacer"></div>
 
-    <!-- Admin (disabled v01) -->
-    <div class="nav-item nav-admin">
-      <button class="nav-btn" disabled title="Disponível em breve">Admin</button>
+    <!-- Authenticated user -->
+    <div class="auth-user-menu">
+      <span id="auth-user-email" class="auth-user-email"></span>
+      <button id="auth-logout-btn" class="auth-logout-btn" type="button">Sair</button>
     </div>
 
   </header>
@@ -209,6 +243,9 @@
   <!-- ============================================================
      SCRIPTS — load order matters
      ============================================================ -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.108.1"></script>
+  <script src="assets/js/supabase-config.js"></script>
+  <script src="assets/js/auth.js"></script>
   <script src="assets/js/data.js"></script>
   <script src="assets/js/utils.js"></script>
   <script src="assets/js/calendar.js"></script>

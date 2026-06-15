@@ -28,4 +28,6 @@ Dados salvos em `localStorage` (v01)
 ## Roadmap
 
 - **v01** — Frontend completo, dados em `localStorage`, hospedagem GitHub Pages
-- **v02** — Login Microsoft SSO (Entra ID), banco SharePoint via Graph API, domínio `viagens.geometrisa.com.br`
+- **v02** — Login único com Supabase Auth, persistência PostgreSQL/JSONB protegida por RLS
+
+O plano técnico da integração está em [`docs/supabase-integration.md`](docs/supabase-integration.md).

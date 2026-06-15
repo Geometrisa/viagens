@@ -5,25 +5,256 @@
 // ============================================================
 const App = {
   currentView: null,
+  _authUnsubscribe: null,
+  _hourlyTimer: null,
+  _startPromise: null,
+  _uiInitialized: false,
+  _started: false,
 
-  init() {
-    db.load();
-    // Auto-update trip statuses based on today's date
-    if (typeof autoUpdateViagemStatus === "function") autoUpdateViagemStatus();
-    // Repeat auto-update every hour (3 600 000 ms)
-    setInterval(() => {
+  async init() {
+    this.setupAuthUI();
+    this.showAuthLoading();
+
+    try {
+      await Auth.init();
+      this._authUnsubscribe = Auth.onAuthStateChange((event, session) => {
+        this.handleAuthStateChange(event, session);
+      });
+
+      const session = await Auth.getSession();
+      if (session) {
+        await this.startAuthenticatedApp(session);
+      } else {
+        this.showLogin();
+      }
+    } catch (error) {
+      console.error("Erro ao iniciar autenticação:", error);
+      this.showLogin(
+        "Não foi possível conectar ao serviço de autenticação. Recarregue a página.",
+        true,
+      );
+    }
+  },
+
+  setupAuthUI() {
+    const form = document.getElementById("auth-login-form");
+    const logoutBtn = document.getElementById("auth-logout-btn");
+
+    form?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      this.handleLoginSubmit();
+    });
+    logoutBtn?.addEventListener("click", () => this.handleLogout());
+  },
+
+  async handleLoginSubmit() {
+    const emailInput = document.getElementById("auth-email");
+    const passwordInput = document.getElementById("auth-password");
+    const email = emailInput?.value.trim() || "";
+    const password = passwordInput?.value || "";
+
+    this.setLoginError("");
+    if (!email || !password) {
+      this.setLoginError("Informe o email e a senha.");
+      return;
+    }
+
+    this.setLoginBusy(true);
+    try {
+      const session = await Auth.signIn(email, password);
+      if (!session) throw new Error("Sessão não criada.");
+
+      if (passwordInput) passwordInput.value = "";
+      await this.startAuthenticatedApp(session);
+    } catch (error) {
+      console.warn("Falha no login.");
+      this.setLoginError("Não foi possível entrar. Verifique email e senha.");
+    } finally {
+      this.setLoginBusy(false);
+    }
+  },
+
+  async handleLogout() {
+    const logoutBtn = document.getElementById("auth-logout-btn");
+    if (logoutBtn) logoutBtn.disabled = true;
+
+    try {
+      await Auth.signOut();
+      this.stopAuthenticatedApp();
+      this.showLogin();
+    } catch (error) {
+      console.error("Erro ao sair:", error);
+      showToast("Não foi possível encerrar a sessão.", "error");
+    } finally {
+      if (logoutBtn) logoutBtn.disabled = false;
+    }
+  },
+
+  handleAuthStateChange(event, session) {
+    if (event === "SIGNED_OUT" || !session) {
+      this.stopAuthenticatedApp();
+      this.showLogin();
+      return;
+    }
+
+    if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+      this.startAuthenticatedApp(session).catch((error) => {
+        console.error("Erro ao abrir aplicação autenticada:", error);
+        this.showLogin("Não foi possível carregar a aplicação.", true);
+      });
+      return;
+    }
+
+    this.updateAuthenticatedUser(session.user);
+  },
+
+  async startAuthenticatedApp(session) {
+    if (this._started) {
+      this.updateAuthenticatedUser(session.user);
+      this.showAuthenticatedApp();
+      return;
+    }
+    if (this._startPromise) return this._startPromise;
+
+    this._startPromise = Promise.resolve().then(() => {
+      db.load();
+
       if (typeof autoUpdateViagemStatus === "function") {
         autoUpdateViagemStatus();
-        App.updateBadges();
       }
-    }, 3600000);
-    this.setupNav();
-    this.setupModals();
-    this.setupGlobalEvents();
-    this.setupSearch();
-    this.setupFAB();
-    this.navigate("resumo");
-    this.updateBadges();
+
+      if (!this._uiInitialized) {
+        this.setupNav();
+        this.setupModals();
+        this.setupGlobalEvents();
+        this.setupSearch();
+        this.setupFAB();
+        this._uiInitialized = true;
+      }
+
+      if (!this._hourlyTimer) {
+        this._hourlyTimer = setInterval(() => {
+          if (typeof autoUpdateViagemStatus === "function") {
+            autoUpdateViagemStatus();
+            App.updateBadges();
+          }
+        }, 3600000);
+      }
+
+      this._started = true;
+      this.updateAuthenticatedUser(session.user);
+      this.showAuthenticatedApp();
+      this.navigate("resumo");
+      this.updateBadges();
+    });
+
+    try {
+      await this._startPromise;
+    } finally {
+      this._startPromise = null;
+    }
+  },
+
+  stopAuthenticatedApp() {
+    if (this._hourlyTimer) {
+      clearInterval(this._hourlyTimer);
+      this._hourlyTimer = null;
+    }
+
+    this._started = false;
+    this._startPromise = null;
+    this.currentView = null;
+
+    document
+      .querySelectorAll(".view")
+      .forEach((view) => view.replaceChildren());
+    document.querySelectorAll(".view.active").forEach((view) => {
+      view.classList.remove("active");
+    });
+    document.getElementById("settings-footer")?.remove();
+    document.getElementById("search-overlay")?.classList.remove("visible");
+    document.getElementById("search-results")?.replaceChildren();
+    const searchInput = document.getElementById("search-input");
+    if (searchInput) searchInput.value = "";
+    document.getElementById("detail-panel-body")?.replaceChildren();
+    document.getElementById("detail-panel-tabs")?.replaceChildren();
+    closeDetailPanel();
+
+    document.querySelectorAll(".modal-overlay").forEach((overlay) => {
+      overlay.classList.add("hidden");
+    });
+    document.getElementById("viagem-modal-body")?.replaceChildren();
+    document.getElementById("av-results")?.replaceChildren();
+
+    const confirmOverlay = document.getElementById("confirm-overlay");
+    confirmOverlay?.querySelector(".confirm-body")?.replaceChildren();
+    const confirmButton = confirmOverlay?.querySelector(".confirm-ok-btn");
+    const cancelButton = confirmOverlay?.querySelector(".confirm-cancel-btn");
+    if (confirmButton) confirmButton.onclick = null;
+    if (cancelButton) cancelButton.onclick = null;
+
+    if (typeof _currentViagemDraft !== "undefined") {
+      _currentViagemDraft = null;
+      _originalViagemSnapshot = null;
+    }
+
+    this.updateAuthenticatedUser(null);
+    db.clearMemory();
+  },
+
+  showAuthLoading() {
+    document.body.classList.remove("auth-logged-out", "auth-authenticated");
+    document.body.classList.add("auth-loading");
+    document.getElementById("auth-loading-screen")?.classList.remove("hidden");
+    document.getElementById("auth-login-screen")?.classList.add("hidden");
+  },
+
+  showLogin(message = "", disabled = false) {
+    document.body.classList.remove("auth-loading", "auth-authenticated");
+    document.body.classList.add("auth-logged-out");
+    document.getElementById("auth-loading-screen")?.classList.add("hidden");
+    document.getElementById("auth-login-screen")?.classList.remove("hidden");
+    this.setLoginError(message);
+    this.setLoginBusy(false, disabled);
+
+    const passwordInput = document.getElementById("auth-password");
+    if (passwordInput) passwordInput.value = "";
+    setTimeout(() => document.getElementById("auth-email")?.focus(), 0);
+  },
+
+  showAuthenticatedApp() {
+    document.body.classList.remove("auth-loading", "auth-logged-out");
+    document.body.classList.add("auth-authenticated");
+    document.getElementById("auth-loading-screen")?.classList.add("hidden");
+    document.getElementById("auth-login-screen")?.classList.add("hidden");
+    this.setLoginError("");
+  },
+
+  updateAuthenticatedUser(user) {
+    const emailEl = document.getElementById("auth-user-email");
+    if (emailEl) {
+      emailEl.textContent = user?.email || "Usuário autenticado";
+      emailEl.title = user?.email || "";
+    }
+  },
+
+  setLoginBusy(busy, disabled = false) {
+    const button = document.getElementById("auth-login-btn");
+    const emailInput = document.getElementById("auth-email");
+    const passwordInput = document.getElementById("auth-password");
+    const shouldDisable = busy || disabled;
+
+    if (button) {
+      button.disabled = shouldDisable;
+      button.textContent = busy ? "Entrando..." : "Entrar";
+    }
+    if (emailInput) emailInput.disabled = shouldDisable;
+    if (passwordInput) passwordInput.disabled = shouldDisable;
+  },
+
+  setLoginError(message) {
+    const errorEl = document.getElementById("auth-login-error");
+    if (errorEl) errorEl.textContent = message;
   },
 
   navigate(view) {
@@ -430,4 +661,8 @@ function openConfirm(
 // ============================================================
 // INIT on DOM ready
 // ============================================================
-document.addEventListener("DOMContentLoaded", () => App.init());
+document.addEventListener("DOMContentLoaded", () => {
+  App.init().catch((error) => {
+    console.error("Erro fatal na inicialização:", error);
+  });
+});
