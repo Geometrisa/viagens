@@ -196,6 +196,51 @@ textarea {
   background: rgba(255, 255, 255, 0.12);
 }
 
+.sync-status {
+  max-width: 220px;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 10px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-status:empty {
+  display: none;
+}
+
+.sync-status.sync-saving {
+  color: #ffe082;
+}
+
+.sync-status.sync-synced {
+  color: #a5d6a7;
+}
+
+.sync-status.sync-offline,
+.sync-status.sync-conflict,
+.sync-status.sync-error {
+  color: #ffab91;
+}
+
+body.sync-offline .btn-primary,
+body.sync-offline .btn-icon,
+body.sync-offline [data-view="configuracoes"] ~ .nav-item .nav-btn,
+body.sync-offline #fab-disponivel {
+  opacity: 0.72;
+}
+
+body.sync-conflict .sync-status {
+  animation: sync-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes sync-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
 .auth-submit:disabled,
 .auth-logout-btn:disabled {
   cursor: wait;
@@ -207,7 +252,8 @@ body:not(.auth-authenticated) #app-main,
 body:not(.auth-authenticated) #detail-panel,
 body:not(.auth-authenticated) #search-overlay,
 body:not(.auth-authenticated) #fab-disponivel,
-body:not(.auth-authenticated) .presentation-exit {
+body:not(.auth-authenticated) .presentation-exit,
+body:not(.auth-authenticated) .sync-status {
   display: none !important;
 }
 

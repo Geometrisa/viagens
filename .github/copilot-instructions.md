@@ -201,9 +201,9 @@ Referência numerada dos itens solicitados pelo cliente. Usar estes números ao 
 
 ## Escopo v01 vs v02
 
-**Estado atual:** Supabase Auth implementado; dados ainda em `localStorage` até a etapa de persistência.
+**Estado atual:** Supabase Auth e persistência PostgreSQL (jsonb + RLS) implementados.
 
-**v02 (próxima etapa):** Login único com Supabase Auth e persistência PostgreSQL protegida por RLS.
+**v02 (próxima etapa):** Validar CRUDs, offline, conflito entre abas e acesso negado para segundo usuário.
 
 ## Roadmap v02 — Supabase
 
@@ -237,9 +237,9 @@ Referência numerada dos itens solicitados pelo cliente. Usar estes números ao 
 1. [x] Criar projeto, usuário único, tabela, grants e policies RLS.
 2. [x] Adicionar SDK fixado e configuração pública.
 3. [x] Implementar `auth.js`, tela de login, sessão e logout.
-4. Converter `App.init()` para fluxo assíncrono.
-5. Adaptar `Database` para Supabase, cache, fila e revisão.
-6. Migrar o JSON local oficial.
+4. [x] Converter `App.init()` para fluxo assíncrono.
+5. [x] Adaptar `Database` para Supabase, cache, fila e revisão.
+6. [x] Migrar o JSON local oficial.
 7. Testar todos os CRUDs, reload, rede indisponível e conflito entre abas.
 8. Confirmar que um segundo usuário autenticado não possui acesso.
 

@@ -304,7 +304,7 @@ function buildHeatmapsSection() {
 // ============================================================
 // AUTO-UPDATE VIAGEM STATUS
 // ============================================================
-function autoUpdateViagemStatus(){
+async function autoUpdateViagemStatus(){
   const today=isoToday();
   let changed=false;
   for(const v of db.data.viagens){
@@ -317,7 +317,9 @@ function autoUpdateViagemStatus(){
       v.status='Em campo';changed=true;
     }
   }
-  if(changed){db.save();}
+  if(changed){
+    await db.save().catch(() => {});
+  }
 }
 
 // ============================================================
@@ -549,9 +551,9 @@ function startViagem(id){
   const v=db.getViagem(id);
   if(!v) return;
   v.status='Em campo';
-  db.saveViagem(v);
-  showToast(`Viagem ${id} iniciada!`,'success');
-  App.refresh();
+  persistDb(db.saveViagem(v), `Viagem ${id} iniciada!`).then((ok)=>{
+    if(ok!==false) App.refresh();
+  });
 }
 
 function showViagemActionsMenu(e, id){
@@ -590,17 +592,20 @@ function showViagemActionsMenu(e, id){
 function cancelViagem(id){
   openConfirm('Cancelar viagem?','Viagem será marcada como cancelada. Pode ser reativada.',()=>{
     const v=db.getViagem(id);
-    if(v){v.status='Cancelado';db.saveViagem(v);}
-    showToast('Viagem cancelada.','success');
-    App.refresh();
+    if(v){
+      v.status='Cancelado';
+      persistDb(db.saveViagem(v), 'Viagem cancelada.').then((ok)=>{
+        if(ok!==false) App.refresh();
+      });
+    }
   },'Cancelar viagem','Manter');
 }
 
 function deleteViagemConfirm(id){
   openConfirm('⚠️ Deletar viagem?','Esta viagem será removida permanentemente.',()=>{
-    db.deleteViagem(id);
-    showToast('Viagem deletada.','success');
-    App.refresh();
+    persistDb(db.deleteViagem(id), 'Viagem deletada.').then((ok)=>{
+      if(ok!==false) App.refresh();
+    });
   },'Deletar permanentemente','Cancelar');
 }
 
@@ -769,9 +774,9 @@ function archiveColaborador(id, archive){
   const c=db.getColaborador(id);
   if(!c) return;
   c.status=archive?'Arquivado':'Ativo';
-  db.save();
-  showToast(archive?'Colaborador arquivado.':'Colaborador reativado.','success');
-  App.refresh();
+  persistDb(db.save(), archive?'Colaborador arquivado.':'Colaborador reativado.').then((ok)=>{
+    if(ok!==false) App.refresh();
+  });
 }
 
 function showAddColaboradorForm(page){
@@ -819,10 +824,12 @@ function saveNewColaborador(){
 
   const newC={id:'c'+(Date.now()),nome,sigla,status:'Ativo'};
   db.data.colaboradores.push(newC);
-  db.save();
-  document.getElementById('equipe-add-form').innerHTML='';
-  showToast('Colaborador adicionado.','success');
-  App.refresh();
+  persistDb(db.save(), 'Colaborador adicionado.').then((ok)=>{
+    if(ok!==false){
+      document.getElementById('equipe-add-form').innerHTML='';
+      App.refresh();
+    }
+  });
 }
 
 function startInlineEdit(tr,c){
@@ -853,7 +860,11 @@ function startInlineEdit(tr,c){
       }
       c.sigla=newSigla;changed=true;
     }
-    if(changed){db.save();showToast('Colaborador atualizado.','success');}
+    if(changed){
+      persistDb(db.save(), 'Colaborador atualizado.').then((ok)=>{
+        if(ok!==false) App.refresh();
+      });
+    }
     nomeCell.contentEditable='false';
     nomeCell.style.background='';
     siglaCell.innerHTML=`<span class="sigla-tag">${c.sigla}</span>`;
@@ -1148,9 +1159,9 @@ function saveNewEmpreendedor(){
   const nome=document.getElementById('new-empr-nome')?.value?.trim();
   if(!nome){showToast('Nome obrigatório.','error');return;}
   db.data.empreendedores.push({id:'e'+(Date.now()),nome,barragens:[]});
-  db.save();
-  showToast('Empreendedor adicionado.','success');
-  App.refresh();
+  persistDb(db.save(), 'Empreendedor adicionado.').then((ok)=>{
+    if(ok!==false) App.refresh();
+  });
 }
 
 function showAddBarragemForm(container, emprId){
@@ -1190,9 +1201,9 @@ function saveNewBarragem(emprId){
   if(!emp) return;
   if(emp.barragens.some(b=>b.sigla===sigla)){showToast(`Sigla ${sigla} já existe neste empreendedor.`,'error');return;}
   emp.barragens.push({id:'b'+(Date.now()),nome,sigla,status:'Ativa'});
-  db.save();
-  showToast('Barragem adicionada.','success');
-  App.refresh();
+  persistDb(db.save(), 'Barragem adicionada.').then((ok)=>{
+    if(ok!==false) App.refresh();
+  });
 }
 
 function archiveBarragem(ev,emprId,barrId){
@@ -1205,9 +1216,9 @@ function archiveBarragem(ev,emprId,barrId){
   const usedIn=db.data.viagens.filter(v=>v.status!=='Cancelado'&&v.paradas.some(p=>p.barragemId===barrId));
   if(usedIn.length>0){showToast(`Barragem usada em ${usedIn.length} viagem(ns) ativa(s). Cancele as viagens primeiro.`,'error');return;}
   b.status='Arquivada';
-  db.save();
-  showToast('Barragem arquivada.','success');
-  App.refresh();
+  persistDb(db.save(), 'Barragem arquivada.').then((ok)=>{
+    if(ok!==false) App.refresh();
+  });
 }
 
 function editBarragemInline(ev, emprId, barrId){
@@ -1250,9 +1261,9 @@ function editBarragemInline(ev, emprId, barrId){
       showToast(`Sigla ${newSigla} já existe neste empreendedor.`,'error');return;
     }
     b.nome=newNome;b.sigla=newSigla;
-    db.save();
-    showToast('Barragem atualizada.','success');
-    App.refresh();
+    persistDb(db.save(), 'Barragem atualizada.').then((ok)=>{
+      if(ok!==false) App.refresh();
+    });
   };
   const cancel=()=>{ row.innerHTML=prevHTML; };
 
@@ -1342,9 +1353,9 @@ function toggleAtividade(id){
   }else{
     a.status='Ativa';
   }
-  db.save();
-  showToast('Atividade atualizada.','success');
-  App.refresh();
+  persistDb(db.save(), 'Atividade atualizada.').then((ok)=>{
+    if(ok!==false) App.refresh();
+  });
 }
 
 function showAddAtividadeForm(cols){
@@ -1379,10 +1390,12 @@ function saveNewAtividade(){
   if(!nome){showToast('Nome obrigatório.','error');return;}
   const maxOrdem=Math.max(...db.data.atividades.map(a=>a.ordem),0);
   db.data.atividades.push({id:'a'+(Date.now()),nome,categoria:cat,icone:icon,status:'Ativa',ordem:maxOrdem+1});
-  db.save();
-  document.querySelector('div[style*="position:fixed"][style*="inset:0"]')?.remove();
-  showToast('Atividade adicionada.','success');
-  App.refresh();
+  persistDb(db.save(), 'Atividade adicionada.').then((ok)=>{
+    if(ok!==false){
+      document.querySelector('div[style*="position:fixed"][style*="inset:0"]')?.remove();
+      App.refresh();
+    }
+  });
 }
 
 // ============================================================
@@ -1575,12 +1588,9 @@ function showRestoreModal(){
 function restoreBackupConfirm(index){
   openConfirm('Restaurar backup?','⚠️ Todos os dados atuais serão substituídos. Tem certeza?',
     ()=>{
-      if(db.restoreBackup(index)){
-        showToast('Backup restaurado com sucesso!','success');
-        App.refresh();
-      }else{
-        showToast('Erro ao restaurar backup.','error');
-      }
+      persistDb(db.restoreBackup(index), 'Backup restaurado com sucesso!').then((ok)=>{
+        if(ok!==false) App.refresh();
+      });
     },'Restaurar','Cancelar'
   );
 }
@@ -1595,9 +1605,9 @@ function importJSON(){
     reader.onload=(evt)=>{
       openConfirm('Importar dados?','⚠️ Os dados atuais serão substituídos pelos do arquivo.',
         ()=>{
-          const res=db.importJSON(evt.target.result);
-          if(res.ok){showToast('Dados importados com sucesso!','success');App.refresh();}
-          else showToast('Erro: '+res.error,'error');
+          persistDb(db.importJSON(evt.target.result), 'Dados importados e sincronizados!').then((ok)=>{
+            if(ok!==false) App.refresh();
+          });
         },'Importar','Cancelar'
       );
     };
@@ -1613,9 +1623,11 @@ function markSettingsDirty(){
 }
 
 function saveSettings(){
-  db.save();
-  _settingsDirty=false;
-  const footer=document.getElementById('settings-footer');
-  if(footer) footer.classList.remove('visible');
-  showToast('Configurações salvas!','success');
+  persistDb(db.save(), 'Configurações salvas!').then((ok)=>{
+    if(ok!==false){
+      _settingsDirty=false;
+      const footer=document.getElementById('settings-footer');
+      if(footer) footer.classList.remove('visible');
+    }
+  });
 }

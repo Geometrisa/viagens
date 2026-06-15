@@ -182,6 +182,8 @@ Regras:
 
 ## 9. Contrato da classe Database
 
+Status: concluído em 15/06/2026.
+
 Manter estes membros e helpers:
 
 ```js
@@ -281,6 +283,8 @@ Chamadas rápidas de `db.save()` podem ser agrupadas com debounce curto, desde q
 
 ## 12. Inicialização da aplicação
 
+Status: concluído em 15/06/2026.
+
 Converter `App.init()` em `async`:
 
 ```js
@@ -310,6 +314,8 @@ Somente depois de autenticar e carregar os dados:
 Garantir que `setupNav()`, `setupModals()` e outros listeners não sejam registrados mais de uma vez após login/logout.
 
 ## 13. Migração dos dados existentes
+
+Status: concluído em 15/06/2026 (seed automático a partir do cache `geoviagens_data_v01` na primeira autenticação; importação JSON persiste no Supabase).
 
 Antes da troca:
 

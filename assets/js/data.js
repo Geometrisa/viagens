@@ -275,51 +275,398 @@ const INITIAL_DATA = {
   historico: [],
 };
 
+const STATE_TABLE = "geoviagens_state";
+const STATE_ID = "main";
+const SAVE_DEBOUNCE_MS = 150;
+
 // ============================================================
 // DATABASE CLASS
 // ============================================================
 class Database {
   constructor() {
     this._data = null;
+    this._revision = null;
+    this._saveQueue = Promise.resolve();
+    this._syncStatus = "idle";
+    this._lastSyncError = null;
+    this._readOnly = false;
+    this._debounceTimer = null;
+    this._pendingSaveResolvers = [];
+    this._conflictNotified = false;
+    this._lastSyncedSnapshot = null;
+    this._lastSyncedRevision = null;
+    this._conflictSnapshot = null;
   }
 
-  load() {
+  get syncStatus() {
+    return this._syncStatus;
+  }
+
+  get readOnly() {
+    return this._readOnly;
+  }
+
+  get lastSyncError() {
+    return this._lastSyncError;
+  }
+
+  getSyncStatusLabel() {
+    switch (this._syncStatus) {
+      case "saving":
+        return "Salvando...";
+      case "synced":
+        return "Sincronizado";
+      case "offline":
+        return "Sem conexão: somente leitura";
+      case "conflict":
+        return "Conflito de edição";
+      case "error":
+        return "Falha ao salvar";
+      default:
+        return "";
+    }
+  }
+
+  _cloneData(data) {
+    return JSON.parse(JSON.stringify(data));
+  }
+
+  _validateDataStructure(data) {
+    return Boolean(
+      data &&
+        Array.isArray(data.viagens) &&
+        Array.isArray(data.colaboradores) &&
+        Array.isArray(data.empreendedores) &&
+        Array.isArray(data.atividades) &&
+        data.configuracoes,
+    );
+  }
+
+  _readCache() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        this._data = JSON.parse(raw);
-      } else {
-        this._data = JSON.parse(JSON.stringify(INITIAL_DATA));
-        this.save();
+      if (!raw) return null;
+
+      const parsed = JSON.parse(raw);
+      if (this._validateDataStructure(parsed)) {
+        return { data: parsed, revision: null };
+      }
+      if (parsed?.data && this._validateDataStructure(parsed.data)) {
+        return {
+          data: parsed.data,
+          revision:
+            typeof parsed.revision === "number" ? parsed.revision : null,
+        };
       }
     } catch (e) {
-      this._data = JSON.parse(JSON.stringify(INITIAL_DATA));
+      return null;
     }
+    return null;
+  }
+
+  _writeCache(data, revision = this._revision) {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          data,
+          revision,
+          cachedAt: new Date().toISOString(),
+        }),
+      );
+    } catch (e) {
+      console.error("Erro ao gravar cache local:", e);
+    }
+  }
+
+  _setSyncStatus(status, error = null) {
+    this._syncStatus = status;
+    this._lastSyncError = error;
+    if (status !== "conflict") this._conflictNotified = false;
+    if (window.App?.updateSyncStatus) App.updateSyncStatus();
+  }
+
+  _markSynced(data, revision) {
+    this._lastSyncedSnapshot = this._cloneData(data);
+    this._lastSyncedRevision = revision;
+    this._conflictSnapshot = null;
+  }
+
+  _isRevisionConflict(error, rows) {
+    if (rows?.length) return false;
+    if (!error) return true;
+    const code = String(error.code || "");
+    return code === "PGRST116" || code === "PGRST103";
+  }
+
+  _handleRevisionConflict(failedSnapshot) {
+    this._conflictSnapshot = this._cloneData(failedSnapshot);
+    this._setSyncStatus("conflict");
+
+    if (this._lastSyncedSnapshot) {
+      this._data = this._cloneData(this._lastSyncedSnapshot);
+      this._revision = this._lastSyncedRevision;
+      this._writeCache(this._data, this._revision);
+      if (window.App?.refresh) App.refresh();
+    }
+
+    if (!this._conflictNotified && window.App?.onSyncConflict) {
+      this._conflictNotified = true;
+      App.onSyncConflict();
+    }
+  }
+
+  restoreConflictSnapshot() {
+    if (!this._conflictSnapshot) return false;
+    this._data = this._cloneData(this._conflictSnapshot);
+    this._writeCache(this._data, this._revision);
+    if (window.App?.refresh) App.refresh();
+    return true;
+  }
+
+  clearConflictSnapshot() {
+    this._conflictSnapshot = null;
+  }
+
+  _isNetworkError(error) {
+    if (!error) return false;
+    if (error.name === "TypeError") return true;
+    const msg = String(error.message || error).toLowerCase();
+    return (
+      msg.includes("failed to fetch") ||
+      msg.includes("network") ||
+      msg.includes("fetch")
+    );
+  }
+
+  async load() {
+    const session = await Auth.getSession();
+    if (!session) throw new Error("Sessão não autenticada.");
+
+    const cached = this._readCache();
+
+    try {
+      const { data: row, error } = await Auth.client
+        .from(STATE_TABLE)
+        .select("data, revision")
+        .eq("id", STATE_ID)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (row) {
+        if (!this._validateDataStructure(row.data)) {
+          throw new Error("Estrutura remota inválida.");
+        }
+        this._data = row.data;
+        this._revision = row.revision;
+        this._readOnly = false;
+        this._writeCache(this._data, this._revision);
+        this._markSynced(this._data, this._revision);
+        this._setSyncStatus("synced");
+        return this;
+      }
+
+      const seed =
+        cached?.data && this._validateDataStructure(cached.data)
+          ? cached.data
+          : this._cloneData(INITIAL_DATA);
+
+      const user = await Auth.getUser();
+      if (!user?.id) throw new Error("Usuário não autenticado.");
+
+      const { data: inserted, error: insertError } = await Auth.client
+        .from(STATE_TABLE)
+        .insert({
+          id: STATE_ID,
+          owner_id: user.id,
+          data: seed,
+          revision: 1,
+          updated_at: new Date().toISOString(),
+        })
+        .select("revision")
+        .single();
+
+      if (insertError) {
+        if (insertError.code === "23505") {
+          return this.reloadFromRemote();
+        }
+        throw new Error(
+          insertError.message?.includes("policy") ||
+            insertError.code === "42501"
+            ? "Usuário sem permissão para acessar os dados."
+            : insertError.message || "Falha ao inicializar dados remotos.",
+        );
+      }
+
+      this._data = seed;
+      this._revision = inserted.revision;
+      this._readOnly = false;
+      this._writeCache(this._data, this._revision);
+      this._markSynced(this._data, this._revision);
+      this._setSyncStatus("synced");
+      return this;
+    } catch (error) {
+      if (cached?.data && this._validateDataStructure(cached.data)) {
+        this._data = cached.data;
+        this._revision =
+          typeof cached.revision === "number" ? cached.revision : 0;
+        this._readOnly = true;
+        this._markSynced(this._data, this._revision);
+        this._setSyncStatus("offline", error);
+        return this;
+      }
+
+      this._setSyncStatus("error", error);
+      throw error;
+    }
+  }
+
+  async reloadFromRemote() {
+    const session = await Auth.getSession();
+    if (!session) throw new Error("Sessão não autenticada.");
+
+    const { data: row, error } = await Auth.client
+      .from(STATE_TABLE)
+      .select("data, revision")
+      .eq("id", STATE_ID)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!row || !this._validateDataStructure(row.data)) {
+      throw new Error("Não foi possível recarregar os dados remotos.");
+    }
+
+    this._data = row.data;
+    this._revision = row.revision;
+    this._readOnly = false;
+    this._conflictNotified = false;
+    this._writeCache(this._data, this._revision);
+    this._markSynced(this._data, this._revision);
+    this._setSyncStatus("synced");
     return this;
   }
 
   get data() {
-    if (!this._data) this.load();
+    if (!this._data) {
+      throw new Error(
+        "Dados não carregados. Execute await db.load() após autenticação.",
+      );
+    }
     return this._data;
   }
 
   clearMemory() {
     this._data = null;
+    this._revision = null;
+    this._syncStatus = "idle";
+    this._lastSyncError = null;
+    this._readOnly = false;
+    this._conflictNotified = false;
+    this._lastSyncedSnapshot = null;
+    this._lastSyncedRevision = null;
+    this._conflictSnapshot = null;
+    if (this._debounceTimer) {
+      clearTimeout(this._debounceTimer);
+      this._debounceTimer = null;
+    }
+    this._pendingSaveResolvers = [];
+    this._saveQueue = Promise.resolve();
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {}
   }
 
   save() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this._data));
-      this._autoBackup();
-    } catch (e) {
-      console.error("Erro ao salvar dados:", e);
-    }
+    return this._persist();
   }
 
   update(updater) {
+    if (this._readOnly) {
+      return Promise.reject(new Error("Modo somente leitura."));
+    }
     updater(this._data);
-    this.save();
+    const promise = this._persist();
     if (window.App) App.onDataChange();
+    return promise;
+  }
+
+  _persist() {
+    if (!this._data) {
+      return Promise.reject(new Error("Sem dados para salvar."));
+    }
+    if (this._readOnly) {
+      return Promise.reject(new Error("Modo somente leitura."));
+    }
+
+    const snapshot = this._cloneData(this._data);
+    this._writeCache(snapshot);
+    this._autoBackup();
+
+    return new Promise((resolve, reject) => {
+      this._pendingSaveResolvers.push({ resolve, reject });
+
+      if (this._debounceTimer) clearTimeout(this._debounceTimer);
+      this._debounceTimer = setTimeout(() => {
+        this._debounceTimer = null;
+        const resolvers = this._pendingSaveResolvers.splice(0);
+        const latestSnapshot = this._cloneData(this._data);
+        this._writeCache(latestSnapshot);
+
+        this._saveQueue = this._saveQueue
+          .then(() => this._executeRemoteSave(latestSnapshot))
+          .then((result) => {
+            resolvers.forEach((entry) => entry.resolve(result));
+            return result;
+          })
+          .catch((err) => {
+            resolvers.forEach((entry) => entry.reject(err));
+          });
+      }, SAVE_DEBOUNCE_MS);
+    });
+  }
+
+  async _executeRemoteSave(snapshot) {
+    this._setSyncStatus("saving");
+
+    const expectedRevision = this._revision;
+    const nextRevision = (expectedRevision ?? 0) + 1;
+
+    try {
+      const { data, error } = await Auth.client
+        .from(STATE_TABLE)
+        .update({
+          data: snapshot,
+          revision: nextRevision,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", STATE_ID)
+        .eq("revision", expectedRevision)
+        .select("revision, updated_at");
+
+      if (error && !this._isRevisionConflict(error, data)) throw error;
+
+      if (!data?.length) {
+        this._handleRevisionConflict(snapshot);
+        throw new Error("Conflito de revisão.");
+      }
+
+      const row = data[0];
+      this._revision = row.revision;
+      this._writeCache(snapshot, this._revision);
+      this._markSynced(snapshot, this._revision);
+      this._setSyncStatus("synced");
+      return row;
+    } catch (error) {
+      if (this._syncStatus !== "conflict") {
+        this._setSyncStatus(
+          this._isNetworkError(error) ? "offline" : "error",
+          error,
+        );
+        if (this._isNetworkError(error)) this._readOnly = true;
+      }
+      throw error;
+    }
   }
 
   _autoBackup() {
@@ -345,12 +692,12 @@ class Database {
 
   restoreBackup(index) {
     const backups = this.getBackups();
-    if (backups[index]) {
-      this._data = JSON.parse(backups[index].data);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this._data));
-      return true;
+    if (!backups[index]) {
+      return Promise.reject(new Error("Backup não encontrado."));
     }
-    return false;
+
+    this._data = JSON.parse(backups[index].data);
+    return this._persist();
   }
 
   exportJSON() {
@@ -368,13 +715,13 @@ class Database {
   importJSON(json) {
     try {
       const parsed = JSON.parse(json);
-      if (!parsed.viagens || !parsed.colaboradores)
-        throw new Error("Estrutura inválida");
+      if (!this._validateDataStructure(parsed)) {
+        return Promise.reject(new Error("Estrutura inválida"));
+      }
       this._data = parsed;
-      this.save();
-      return { ok: true };
+      return this._persist();
     } catch (e) {
-      return { ok: false, error: e.message };
+      return Promise.reject(new Error(e.message || "JSON inválido"));
     }
   }
 
@@ -490,14 +837,16 @@ class Database {
       }
       this.data.viagens.push(viagem);
     }
-    this.save();
+    const promise = this._persist();
     if (window.App) App.onDataChange();
+    return promise;
   }
 
   deleteViagem(id) {
     this.data.viagens = this.data.viagens.filter((v) => v.id !== id);
-    this.save();
+    const promise = this._persist();
     if (window.App) App.onDataChange();
+    return promise;
   }
 }
 

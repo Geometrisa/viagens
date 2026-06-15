@@ -112,15 +112,28 @@ const App = {
     if (this._started) {
       this.updateAuthenticatedUser(session.user);
       this.showAuthenticatedApp();
+      this.updateSyncStatus();
       return;
     }
     if (this._startPromise) return this._startPromise;
 
-    this._startPromise = Promise.resolve().then(() => {
-      db.load();
+    this._startPromise = (async () => {
+      this.showDataLoading();
+      try {
+        await db.load();
+      } catch (error) {
+        console.error("Erro ao carregar dados:", error);
+        const message =
+          error?.message?.includes("permissão") ||
+          error?.message?.includes("permissao")
+            ? "Usuário sem permissão para acessar os dados."
+            : "Não foi possível carregar os dados. Recarregue a página.";
+        this.showLogin(message, true);
+        throw error;
+      }
 
       if (typeof autoUpdateViagemStatus === "function") {
-        autoUpdateViagemStatus();
+        await autoUpdateViagemStatus();
       }
 
       if (!this._uiInitialized) {
@@ -135,8 +148,7 @@ const App = {
       if (!this._hourlyTimer) {
         this._hourlyTimer = setInterval(() => {
           if (typeof autoUpdateViagemStatus === "function") {
-            autoUpdateViagemStatus();
-            App.updateBadges();
+            autoUpdateViagemStatus().finally(() => App.updateBadges());
           }
         }, 3600000);
       }
@@ -144,9 +156,10 @@ const App = {
       this._started = true;
       this.updateAuthenticatedUser(session.user);
       this.showAuthenticatedApp();
+      this.updateSyncStatus();
       this.navigate("resumo");
       this.updateBadges();
-    });
+    })();
 
     try {
       await this._startPromise;
@@ -164,6 +177,11 @@ const App = {
     this._started = false;
     this._startPromise = null;
     this.currentView = null;
+    document.body.classList.remove(
+      "sync-offline",
+      "sync-conflict",
+      "sync-error",
+    );
 
     document
       .querySelectorAll(".view")
@@ -207,6 +225,20 @@ const App = {
     document.body.classList.add("auth-loading");
     document.getElementById("auth-loading-screen")?.classList.remove("hidden");
     document.getElementById("auth-login-screen")?.classList.add("hidden");
+    this.setLoadingMessage("Verificando sessão...");
+  },
+
+  showDataLoading() {
+    document.body.classList.remove("auth-logged-out");
+    document.body.classList.add("auth-loading", "auth-authenticated");
+    document.getElementById("auth-loading-screen")?.classList.remove("hidden");
+    document.getElementById("auth-login-screen")?.classList.add("hidden");
+    this.setLoadingMessage("Carregando dados...");
+  },
+
+  setLoadingMessage(message) {
+    const el = document.querySelector("#auth-loading-screen p");
+    if (el) el.textContent = message;
   },
 
   showLogin(message = "", disabled = false) {
@@ -330,6 +362,74 @@ const App = {
 
   onDataChange() {
     this.updateBadges();
+  },
+
+  updateSyncStatus() {
+    const el = document.getElementById("sync-status");
+    if (!el || !this._started) return;
+
+    const label = db.getSyncStatusLabel();
+    el.textContent = label;
+    el.title = label;
+
+    el.classList.remove(
+      "sync-saving",
+      "sync-synced",
+      "sync-offline",
+      "sync-conflict",
+      "sync-error",
+    );
+
+    document.body.classList.remove("sync-offline", "sync-conflict", "sync-error");
+
+    switch (db.syncStatus) {
+      case "saving":
+        el.classList.add("sync-saving");
+        break;
+      case "synced":
+        el.classList.add("sync-synced");
+        break;
+      case "offline":
+        el.classList.add("sync-offline");
+        document.body.classList.add("sync-offline");
+        break;
+      case "conflict":
+        el.classList.add("sync-conflict");
+        document.body.classList.add("sync-conflict");
+        break;
+      case "error":
+        el.classList.add("sync-error");
+        document.body.classList.add("sync-error");
+        break;
+      default:
+        break;
+    }
+  },
+
+  onSyncConflict() {
+    openConfirm(
+      "Conflito de edição",
+      "Outra aba ou sessão alterou os dados remotos. Suas alterações nesta aba <strong>não foram salvas</strong> e a tela foi revertida para a última versão sincronizada.",
+      () => {
+        db
+          .reloadFromRemote()
+          .then(() => {
+            db.clearConflictSnapshot();
+            showToast("Dados recarregados do servidor.", "success");
+            App.refresh();
+          })
+          .catch(() => {
+            showToast("Não foi possível recarregar os dados.", "error");
+          });
+      },
+      "Recarregar do servidor",
+      "Ver alteração local",
+      () => {
+        if (db.restoreConflictSnapshot()) {
+          showToast("Exibindo alteração local não salva.", "info");
+        }
+      },
+    );
   },
 
   updateBadges() {
@@ -602,6 +702,30 @@ function showToast(message, type = "success") {
 }
 
 // ============================================================
+// PERSIST HELPERS
+// ============================================================
+function persistDb(operation, successMessage) {
+  return Promise.resolve(operation)
+    .then((result) => {
+      if (successMessage) showToast(successMessage, "success");
+      return result;
+    })
+    .catch((error) => {
+      if (db.syncStatus === "conflict") {
+        showToast("Conflito de edição: alteração não foi salva.", "error");
+        return false;
+      }
+      if (db.readOnly) {
+        showToast("Sem conexão: somente leitura.", "error");
+      } else {
+        showToast("Falha ao salvar.", "error");
+      }
+      console.error(error);
+      return false;
+    });
+}
+
+// ============================================================
 // CONFIRM DIALOG
 // ============================================================
 function openConfirm(
@@ -610,6 +734,7 @@ function openConfirm(
   onConfirm,
   confirmLabel = "Confirmar",
   cancelLabel = "Cancelar",
+  onCancel = null,
 ) {
   const overlay = document.getElementById("confirm-overlay");
   if (!overlay) return;
@@ -634,6 +759,7 @@ function openConfirm(
   };
   cancelBtn.onclick = () => {
     overlay.classList.add("hidden");
+    if (onCancel) onCancel();
   };
 
   overlay.classList.remove("hidden");

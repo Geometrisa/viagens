@@ -781,11 +781,14 @@ function saveViagemDraft() {
     db.data.nextColorIndex = draft.colorIndex + 1;
   }
 
-  db.saveViagem(draft);
-  document.getElementById("viagem-modal-overlay").classList.add("hidden");
-  _currentViagemDraft = null;
-  showToast(`Viagem ${draft.id} salva com sucesso!`, "success");
-  App.refresh();
+  persistDb(db.saveViagem(draft), `Viagem ${draft.id} salva com sucesso!`).then(
+    (ok) => {
+      if (ok === false) return;
+      document.getElementById("viagem-modal-overlay").classList.add("hidden");
+      _currentViagemDraft = null;
+      App.refresh();
+    },
+  );
 }
 
 // ============================================================

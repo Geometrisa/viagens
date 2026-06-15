@@ -1303,12 +1303,12 @@ function applyViagemDateShift(viagemId, deltaDays) {
       c.dataFim = addDays(c.dataFim, deltaDays);
     }
   }
-  db.saveViagem(v);
-  renderCalendarPage();
-  showToast(
+  persistDb(
+    db.saveViagem(v),
     `${v.id} movida ${deltaDays > 0 ? "+" : ""}${deltaDays} dia(s)`,
-    "success",
-  );
+  ).then((ok) => {
+    if (ok !== false) renderCalendarPage();
+  });
 }
 
 function applyViagemStartShift(viagemId, deltaDays) {
@@ -1323,9 +1323,9 @@ function applyViagemStartShift(viagemId, deltaDays) {
   for (const c of p.colaboradores) {
     if (c.dataInicio === oldStart) c.dataInicio = newStart;
   }
-  db.saveViagem(v);
-  renderCalendarPage();
-  showToast(`${v.id}: início ajustado`, "success");
+  persistDb(db.saveViagem(v), `${v.id}: início ajustado`).then((ok) => {
+    if (ok !== false) renderCalendarPage();
+  });
 }
 
 function applyViagemEndShift(viagemId, deltaDays) {
@@ -1340,7 +1340,7 @@ function applyViagemEndShift(viagemId, deltaDays) {
   for (const c of p.colaboradores) {
     if (c.dataFim === oldEnd) c.dataFim = newEnd;
   }
-  db.saveViagem(v);
-  renderCalendarPage();
-  showToast(`${v.id}: fim ajustado`, "success");
+  persistDb(db.saveViagem(v), `${v.id}: fim ajustado`).then((ok) => {
+    if (ok !== false) renderCalendarPage();
+  });
 }
