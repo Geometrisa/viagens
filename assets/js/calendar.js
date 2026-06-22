@@ -26,6 +26,11 @@ function initCalendar(mode) {
   renderCalendarPage();
 }
 
+function renderCurrentCalendarPage() {
+  if (CalState.mode === "equipe") renderTeamCalendarPage();
+  else renderCalendarPage();
+}
+
 function renderCalendarPage() {
   const container = document.getElementById("view-calendar-" + CalState.mode);
   if (!container) return;
@@ -43,7 +48,10 @@ function renderCalendarPage() {
   main.id = "cal-content-" + CalState.mode;
 
   // Header bar (filters + zoom + export)
-  main.appendChild(buildCalHeaderBar());
+  const stickyTop = document.createElement("div");
+  stickyTop.className = "cal-sticky-top";
+  stickyTop.appendChild(buildCalHeaderBar());
+  main.appendChild(stickyTop);
 
   // Months — hide past months for current year
   const todayNow = new Date();
@@ -103,7 +111,7 @@ function buildCalSidebar() {
   prevBtn.onclick = () => {
     if (CalState.year > minYear) {
       CalState.year--;
-      renderCalendarPage();
+      renderCurrentCalendarPage();
     }
   };
 
@@ -117,7 +125,7 @@ function buildCalSidebar() {
   }
   sel.onchange = () => {
     CalState.year = +sel.value;
-    renderCalendarPage();
+    renderCurrentCalendarPage();
   };
 
   const nextBtn = document.createElement("button");
@@ -125,7 +133,7 @@ function buildCalSidebar() {
   nextBtn.onclick = () => {
     if (CalState.year < maxYear) {
       CalState.year++;
-      renderCalendarPage();
+      renderCurrentCalendarPage();
     }
   };
 
@@ -162,7 +170,7 @@ function buildCalSidebar() {
   todayBtn.textContent = "📅 Ir para Hoje";
   todayBtn.onclick = () => {
     CalState.year = new Date().getFullYear();
-    renderCalendarPage();
+    renderCurrentCalendarPage();
     setTimeout(scrollToCurrentMonth, 50);
   };
   sidebar.appendChild(todayBtn);
@@ -253,8 +261,6 @@ function buildCalHeaderBar() {
   // Filters
   const filtersDiv = document.createElement("div");
   filtersDiv.className = "cal-filters";
-  filtersDiv.style.cssText =
-    "position:relative;z-index:auto;padding:0;flex:1;flex-wrap:wrap";
 
   const label = document.createElement("span");
   label.className = "cal-filters-label";
@@ -704,19 +710,19 @@ function toggleFilterViagem(id) {
       }
     }
   }
-  renderCalendarPage();
+  renderCurrentCalendarPage();
 }
 
 function toggleFilterColaborador(id) {
   const idx = CalState.filters.colaboradores.indexOf(id);
   if (idx >= 0) CalState.filters.colaboradores.splice(idx, 1);
   else CalState.filters.colaboradores.push(id);
-  renderCalendarPage();
+  renderCurrentCalendarPage();
 }
 
 function clearFilters() {
   CalState.filters = { viagens: [], colaboradores: [] };
-  renderCalendarPage();
+  renderCurrentCalendarPage();
 }
 
 function hasActiveFilters() {
@@ -754,6 +760,33 @@ function getColaboradoresComViagens() {
   return db.data.colaboradores.filter((c) => colIds.has(c.id));
 }
 
+function getFilteredTeamColaboradores() {
+  let colaboradores = db.data.colaboradores.filter(
+    (c) => c.status === "Ativo" || CalState.showArchived,
+  );
+
+  if (CalState.filters.colaboradores.length > 0) {
+    colaboradores = colaboradores.filter((c) =>
+      CalState.filters.colaboradores.includes(c.id),
+    );
+  }
+
+  if (CalState.filters.viagens.length > 0) {
+    const colIdsInTrips = new Set();
+    for (const v of db.data.viagens) {
+      if (!CalState.filters.viagens.includes(v.id)) continue;
+      if (v.status === "Cancelado") continue;
+      for (const p of v.paradas || []) {
+        for (const c of p.colaboradores || [])
+          colIdsInTrips.add(c.colaboradorId);
+      }
+    }
+    colaboradores = colaboradores.filter((c) => colIdsInTrips.has(c.id));
+  }
+
+  return colaboradores;
+}
+
 // ============================================================
 // SCROLL HELPERS
 // ============================================================
@@ -762,10 +795,39 @@ function scrollToCurrentMonth() {
   scrollToMonth(m);
 }
 
+function getCalScrollContainer() {
+  if (typeof App !== "undefined" && App.currentView === "ferias") {
+    return document.getElementById("cal-content-ferias");
+  }
+  return document.getElementById("cal-content-" + CalState.mode);
+}
+
 function scrollToMonth(m) {
-  const prefix = CalState.mode === "equipe" ? "month-equipe" : "month";
-  const el = document.getElementById(`${prefix}-${CalState.year}-${m}`);
-  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  const prefix =
+    CalState.mode === "equipe"
+      ? "month-equipe"
+      : CalState.mode === "ferias"
+        ? "month-ferias"
+        : "month";
+  const year =
+    typeof App !== "undefined" && App.currentView === "ferias"
+      ? VacState.year
+      : CalState.year;
+  const el = document.getElementById(`${prefix}-${year}-${m}`);
+  const container = getCalScrollContainer();
+  if (!el || !container) return;
+
+  const sticky = container.querySelector(".cal-sticky-top");
+  const stickyH = sticky ? sticky.offsetHeight : 0;
+  const elTop =
+    el.getBoundingClientRect().top -
+    container.getBoundingClientRect().top +
+    container.scrollTop;
+
+  container.scrollTo({
+    top: Math.max(0, elTop - stickyH - 8),
+    behavior: "smooth",
+  });
 }
 
 function applyZoom() {
@@ -797,11 +859,12 @@ function renderTeamCalendarPage() {
   main.className = "cal-content";
   main.id = "cal-content-equipe";
 
-  // Capacity bar
-  main.appendChild(buildCapacityBar());
-
-  // Header bar
-  main.appendChild(buildCalHeaderBar());
+  // Sticky toolbar: capacity + filters
+  const stickyTop = document.createElement("div");
+  stickyTop.className = "cal-sticky-top";
+  stickyTop.appendChild(buildCapacityBar());
+  stickyTop.appendChild(buildCalHeaderBar());
+  main.appendChild(stickyTop);
 
   // Months — hide past months for current year
   const todayTeam = new Date();
@@ -901,10 +964,7 @@ function buildTeamMonthBlock(year, month) {
   const lastDay = new Date(year, month + 1, 0).getDate();
   const monthEnd = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
-  // For each active colaborador, show their bars
-  const colaboradores = db.data.colaboradores.filter(
-    (c) => c.status === "Ativo" || CalState.showArchived,
-  );
+  const colaboradores = getFilteredTeamColaboradores();
 
   // Week day headers
   const wh = document.createElement("div");
@@ -989,6 +1049,11 @@ function buildTeamWeekRow(
   const assignments = [];
   for (const v of db.data.viagens) {
     if (v.status === "Cancelado") continue;
+    if (
+      CalState.filters.viagens.length > 0 &&
+      !CalState.filters.viagens.includes(v.id)
+    )
+      continue;
     for (const p of v.paradas || []) {
       for (const c of p.colaboradores || []) {
         if (c.colaboradorId !== colaborador.id) continue;
@@ -1307,7 +1372,7 @@ function applyViagemDateShift(viagemId, deltaDays) {
     db.saveViagem(v),
     `${v.id} movida ${deltaDays > 0 ? "+" : ""}${deltaDays} dia(s)`,
   ).then((ok) => {
-    if (ok !== false) renderCalendarPage();
+    if (ok !== false) renderCurrentCalendarPage();
   });
 }
 
@@ -1324,7 +1389,7 @@ function applyViagemStartShift(viagemId, deltaDays) {
     if (c.dataInicio === oldStart) c.dataInicio = newStart;
   }
   persistDb(db.saveViagem(v), `${v.id}: início ajustado`).then((ok) => {
-    if (ok !== false) renderCalendarPage();
+    if (ok !== false) renderCurrentCalendarPage();
   });
 }
 
@@ -1341,6 +1406,6 @@ function applyViagemEndShift(viagemId, deltaDays) {
     if (c.dataFim === oldEnd) c.dataFim = newEnd;
   }
   persistDb(db.saveViagem(v), `${v.id}: fim ajustado`).then((ok) => {
-    if (ok !== false) renderCalendarPage();
+    if (ok !== false) renderCurrentCalendarPage();
   });
 }

@@ -26,6 +26,29 @@ const TRIP_COLORS = [
   "#C0E0E8",
 ];
 
+const COLAB_COLORS = [
+  "#6264A7",
+  "#4F6BED",
+  "#038387",
+  "#498205",
+  "#C239B3",
+  "#D83B01",
+  "#FFB900",
+  "#E74856",
+  "#881798",
+  "#005B70",
+  "#CA5010",
+  "#8764B8",
+  "#00B7C3",
+  "#107C10",
+  "#5C2D91",
+  "#0078D4",
+  "#8E562E",
+  "#69797E",
+  "#E3008C",
+  "#0063B1",
+];
+
 const STATUS_COLORS = {
   Previsto: "#BDD8E9",
   Confirmado: "#D4EDDA",
@@ -272,6 +295,8 @@ const INITIAL_DATA = {
     feriados: { nacionais: true },
   },
   nextColorIndex: 2,
+  nextFeriasId: 1,
+  ferias: [],
   historico: [],
 };
 
@@ -340,6 +365,18 @@ class Database {
         Array.isArray(data.atividades) &&
         data.configuracoes,
     );
+  }
+
+  _ensureFeriasData() {
+    if (!this._data) return;
+    if (!Array.isArray(this._data.ferias)) this._data.ferias = [];
+    if (typeof this._data.nextFeriasId !== "number") {
+      const maxId = this._data.ferias.reduce((mx, f) => {
+        const n = parseInt(String(f.id).replace("f", ""), 10);
+        return !isNaN(n) && n > mx ? n : mx;
+      }, 0);
+      this._data.nextFeriasId = maxId + 1;
+    }
   }
 
   _readCache() {
@@ -553,6 +590,7 @@ class Database {
         "Dados não carregados. Execute await db.load() após autenticação.",
       );
     }
+    this._ensureFeriasData();
     return this._data;
   }
 
@@ -824,6 +862,67 @@ class Database {
       }
     }
     return days.size;
+  }
+
+  getColaboradorColor(colaboradorId) {
+    const idx = this.data.colaboradores.findIndex((c) => c.id === colaboradorId);
+    if (idx < 0) return "#69797E";
+    return COLAB_COLORS[idx % COLAB_COLORS.length];
+  }
+
+  getFerias(colaboradorId) {
+    const ferias = this.data.ferias || [];
+    if (!colaboradorId) return ferias;
+    return ferias.filter((f) => f.colaboradorId === colaboradorId);
+  }
+
+  getFeriasEntry(id) {
+    return (this.data.ferias || []).find((f) => f.id === id);
+  }
+
+  isColaboradorOnVacation(colaboradorId, start, end) {
+    if (!colaboradorId || !start || !end) return false;
+    return (this.data.ferias || []).some(
+      (f) =>
+        f.colaboradorId === colaboradorId &&
+        datesOverlap(f.dataInicio, f.dataFim, start, end),
+    );
+  }
+
+  getColaboradorVacationOverlap(colaboradorId, start, end) {
+    if (!colaboradorId || !start || !end) return null;
+    return (
+      (this.data.ferias || []).find(
+        (f) =>
+          f.colaboradorId === colaboradorId &&
+          datesOverlap(f.dataInicio, f.dataFim, start, end),
+      ) || null
+    );
+  }
+
+  nextFeriasId() {
+    this._ensureFeriasData();
+    const id = `f${this.data.nextFeriasId}`;
+    this.data.nextFeriasId += 1;
+    return id;
+  }
+
+  saveFerias(entry) {
+    this._ensureFeriasData();
+    const idx = this.data.ferias.findIndex((f) => f.id === entry.id);
+    if (idx >= 0) this.data.ferias[idx] = entry;
+    else this.data.ferias.push(entry);
+    const promise = this._persist();
+    if (window.App) App.onDataChange();
+    return promise;
+  }
+
+  deleteFerias(id) {
+    this._ensureFeriasData();
+    this.data.ferias = this.data.ferias.filter((f) => f.id !== id);
+    const promise = this._persist();
+    if (window.App) App.onDataChange();
+    return promise;
   }
 
   saveViagem(viagem) {

@@ -340,6 +340,9 @@ const App = {
         CalState.mode = "equipe";
         renderTeamCalendarPage();
         break;
+      case "ferias":
+        renderVacationPage();
+        break;
       case "timeline":
         initTimeline();
         break;

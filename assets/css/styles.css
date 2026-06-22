@@ -395,6 +395,28 @@ body:not(.auth-authenticated) .sync-status {
   min-height: calc(100vh - var(--header-h));
 }
 
+/* Calendar views: single scroll container, no page-level scroll */
+#view-calendar-viagens.active,
+#view-calendar-equipe.active,
+#view-ferias.active {
+  height: calc(100vh - var(--header-h));
+  overflow: hidden;
+}
+
+body:has(#view-calendar-viagens.active),
+body:has(#view-calendar-equipe.active),
+body:has(#view-ferias.active) {
+  overflow: hidden;
+}
+
+body.presentation-mode:has(.calendar-page) {
+  overflow: hidden;
+}
+
+body.presentation-mode .calendar-page {
+  height: 100vh;
+}
+
 .view {
   display: none;
 }
@@ -415,6 +437,7 @@ body:not(.auth-authenticated) .sync-status {
 .cal-sidebar {
   width: 160px;
   flex-shrink: 0;
+  min-height: 0;
   background: var(--c-white);
   border-right: 1px solid var(--c-border);
   display: flex;
@@ -528,17 +551,56 @@ body:not(.auth-authenticated) .sync-status {
 /* Calendar content area */
 .cal-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   background: var(--c-bg);
   padding: 0 0 40px;
 }
 
-/* Filters bar */
-.cal-filters {
+/* Sticky toolbar — capacity, filters, vacation header */
+.cal-sticky-top {
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 50;
+  background: var(--c-bg);
+  flex-shrink: 0;
+}
+
+.cal-sticky-top .team-capacity,
+.cal-sticky-top .cal-header-bar,
+.cal-sticky-top .vacation-header-bar,
+.cal-sticky-top .vacation-filter-bar {
+  position: static;
+  top: auto;
+}
+
+.cal-sticky-top .team-capacity {
+  margin: 12px 16px 0;
+}
+
+.cal-sticky-top .cal-header-bar {
+  margin: 0;
+}
+
+.cal-sticky-top .vacation-header-bar {
+  margin: 12px 16px 0;
+}
+
+.cal-sticky-top .vacation-filter-bar {
+  margin: 0 16px 8px;
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+.cal-header-bar .cal-filters {
+  flex: 1;
+  border-bottom: none;
+  padding: 0;
+}
+
+/* Filters bar */
+.cal-filters {
+  z-index: 1;
   background: var(--c-white);
   border-bottom: 1px solid var(--c-border);
   padding: 6px 16px;
@@ -594,9 +656,6 @@ body:not(.auth-authenticated) .sync-status {
   background: var(--c-white);
   border-bottom: 1px solid #ddd;
   gap: 8px;
-  position: sticky;
-  top: 0;
-  z-index: 30;
 }
 .cal-zoom-group {
   display: flex;
@@ -1551,16 +1610,13 @@ body:not(.auth-authenticated) .sync-status {
   background: var(--c-white);
   border-radius: var(--radius);
   padding: 10px 16px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
   display: flex;
   align-items: center;
   gap: 12px;
   box-shadow: var(--shadow);
   font-size: 13px;
   cursor: pointer;
-  position: sticky;
-  top: 0;
-  z-index: 10;
 }
 .team-capacity:hover {
   background: var(--c-bg);
@@ -1568,6 +1624,74 @@ body:not(.auth-authenticated) .sync-status {
 .team-capacity .cap-label {
   font-weight: 700;
   color: var(--c-primary);
+}
+
+/* Vacation calendar */
+.vacation-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 0;
+  padding: 12px 16px;
+  background: var(--c-white);
+  border-radius: var(--radius) var(--radius) 0 0;
+  box-shadow: var(--shadow);
+}
+.vacation-filter-bar {
+  box-shadow: var(--shadow);
+}
+.vacation-title {
+  margin: 0;
+  font-size: 16px;
+  color: var(--c-primary);
+}
+.vacation-subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #888;
+}
+.vacation-person-header {
+  padding: 4px 8px;
+  background: #f8f9fb;
+  border-top: 2px solid var(--c-border);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--c-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.vacation-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.vacation-bar {
+  color: #fff;
+  font-weight: 600;
+}
+.vacation-bar .bar-sigla {
+  color: #fff;
+}
+.vacation-unavailable-tag {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--c-error);
+  background: #fdecea;
+  border: 1px solid #f5c6cb;
+  border-radius: 10px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+.vacation-unavailable-row {
+  font-size: 11px;
+  color: var(--c-error);
+  background: #fff5f5;
+  border-left: 3px solid var(--c-error);
+  padding: 4px 8px 4px 10px;
+  margin: 0 0 6px 28px;
 }
 
 /* Equipe calendar rows */
@@ -2118,6 +2242,9 @@ body.presentation-mode .presentation-exit {
   #fab-disponivel,
   #search-overlay,
   .cal-header-bar,
+  .cal-sticky-top,
+  .vacation-filter-bar,
+  .vacation-header-bar,
   .cal-sidebar,
   .past-months-toggle,
   .nav-sidebar,

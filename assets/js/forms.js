@@ -476,10 +476,19 @@ function buildColaboradoresSection(parada) {
     }
     searchList.style.display = "block";
     results.slice(0, 10).forEach((c) => {
+      const onVacation = db.isColaboradorOnVacation(
+        c.id,
+        parada.dataInicio,
+        parada.dataFim,
+      );
       const item = document.createElement("div");
       item.style.cssText =
-        "padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:6px";
-      item.innerHTML = `<span class="sigla-tag">${c.sigla}</span> ${escapeHtml(c.nome)}`;
+        "padding:6px 10px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap";
+      item.innerHTML = `<span class="sigla-tag">${c.sigla}</span> ${escapeHtml(c.nome)}${
+        onVacation
+          ? ' <span class="vacation-unavailable-tag">Colaborador indisponível</span>'
+          : ""
+      }`;
       item.onmousedown = (e) => {
         e.preventDefault();
         addColaboradorToParada(parada, c.id);
@@ -573,7 +582,7 @@ function buildColaboradoresSection(parada) {
         dEnd.value = ca.dataFim;
       }
       refreshHighlight();
-      checkColabConflicts(colabList);
+      renderViagemForm();
     };
 
     const dArrow = document.createElement("span");
@@ -595,7 +604,7 @@ function buildColaboradoresSection(parada) {
         dStart.value = ca.dataInicio;
       }
       refreshHighlight();
-      checkColabConflicts(colabList);
+      renderViagemForm();
     };
 
     // Badge shown when this colaborador has a custom (shorter) period
@@ -664,6 +673,18 @@ function buildColaboradoresSection(parada) {
 
     item.append(siglaChip, nameSpan, datesDiv, confDiv, removeBtn);
     colabList.appendChild(item);
+
+    const vacationOverlap = db.getColaboradorVacationOverlap(
+      ca.colaboradorId,
+      ca.dataInicio,
+      ca.dataFim,
+    );
+    if (vacationOverlap) {
+      const vacWarn = document.createElement("div");
+      vacWarn.className = "vacation-unavailable-row";
+      vacWarn.textContent = `🏖️ Colaborador indisponível — férias de ${formatDate(vacationOverlap.dataInicio)} a ${formatDate(vacationOverlap.dataFim)}`;
+      colabList.appendChild(vacWarn);
+    }
 
     // Conflict warning for this colaborador
     const confWarnings = conflicts.filter(
@@ -836,7 +857,8 @@ function searchAvailability() {
 
   const activeColabs = db.getActiveColaboradores();
   const available = [],
-    occupied = [];
+    occupied = [],
+    onVacation = [];
 
   for (const c of activeColabs) {
     let busy = false;
@@ -858,7 +880,10 @@ function searchAvailability() {
       if (busy) break;
     }
     if (busy) occupied.push({ col: c, viagem: busyViagem });
-    else available.push(c);
+    else if (db.isColaboradorOnVacation(c.id, start, end)) {
+      const ferias = db.getColaboradorVacationOverlap(c.id, start, end);
+      onVacation.push({ col: c, ferias });
+    } else available.push(c);
   }
 
   // Disponíveis
@@ -896,6 +921,27 @@ function searchAvailability() {
     item.style.cssText =
       "display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #eee;font-size:12px";
     item.innerHTML = `<span class="sigla-tag">${col.sigla}</span> ${escapeHtml(col.nome)} <span style="color:#888;margin-left:auto">→ ${viagem.id}</span>`;
+    results.appendChild(item);
+  }
+
+  const vacTitle = document.createElement("h4");
+  vacTitle.style.cssText =
+    "font-size:12px;font-weight:700;color:var(--c-alert);margin:12px 0 6px";
+  vacTitle.textContent = `🏖️ De férias (${onVacation.length})`;
+  results.appendChild(vacTitle);
+
+  if (!onVacation.length) {
+    const none = document.createElement("p");
+    none.style.cssText = "font-size:12px;color:#888;margin:0";
+    none.textContent = "Nenhum colaborador de férias neste período.";
+    results.appendChild(none);
+  }
+
+  for (const { col, ferias } of onVacation) {
+    const item = document.createElement("div");
+    item.style.cssText =
+      "display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #eee;font-size:12px";
+    item.innerHTML = `<span class="sigla-tag">${col.sigla}</span> ${escapeHtml(col.nome)} <span class="vacation-unavailable-tag" style="margin-left:auto">Colaborador indisponível</span> <span style="color:#888">${formatDate(ferias.dataInicio)} → ${formatDate(ferias.dataFim)}</span>`;
     results.appendChild(item);
   }
 }
