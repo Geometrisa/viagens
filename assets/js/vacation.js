@@ -290,7 +290,6 @@ function buildVacationWeekRow(week, year, month, colaborador, holidays, today) {
   const weekEnd = week[6];
   const weekRow = document.createElement("div");
   weekRow.className = "week-row vacation-week-row";
-  weekRow.style.minHeight = "40px";
 
   for (let di = 0; di < 7; di++) {
     const dateStr = week[di];
@@ -363,6 +362,9 @@ function buildVacationWeekRow(week, year, month, colaborador, holidays, today) {
     barRow.appendChild(bar);
     barsLayer.appendChild(barRow);
   }
+
+  const maxLane = Math.max(0, entries.length - 1);
+  weekRow.style.minHeight = computeWeekRowBarHeight(maxLane) + "px";
 
   weekRow.appendChild(barsLayer);
   return weekRow;

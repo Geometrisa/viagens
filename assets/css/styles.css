@@ -2255,9 +2255,9 @@ body.calendar-printing #calendar-print-root .month-block {
   padding: 0 !important;
   box-shadow: none !important;
   border: 1px solid #ccc !important;
-  height: auto !important;
-  min-height: 0 !important;
-  overflow: visible !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
+  overflow: hidden !important;
   break-after: page;
   page-break-after: always;
   break-inside: avoid;
@@ -2275,20 +2275,44 @@ body.calendar-printing #calendar-print-root .month-block:last-child {
 }
 
 body.calendar-printing #calendar-print-root .month-header,
-body.calendar-printing #calendar-print-root .week-header {
+body.calendar-printing #calendar-print-root .week-header,
+body.calendar-printing #calendar-print-root .team-person-header,
+body.calendar-printing #calendar-print-root .vacation-person-header {
   flex-shrink: 0 !important;
 }
 
 body.calendar-printing #calendar-print-root .week-row {
-  flex: 1 !important;
+  flex: 1 1 0 !important;
   min-height: 0 !important;
   height: auto !important;
   position: relative !important;
 }
 
+body.calendar-printing #calendar-print-root .month-block.print-multi-person {
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  break-inside: auto;
+  page-break-inside: auto;
+}
+
+body.calendar-printing #calendar-print-root .month-block.print-multi-person .week-row {
+  flex: 0 0 auto !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+
+body.calendar-printing #calendar-print-root .month-block.print-multi-person .week-bars-layer {
+  z-index: 2;
+}
+
 body.calendar-printing #calendar-print-root .day-cell {
   height: 100% !important;
   min-height: 0 !important;
+}
+
+body.calendar-printing #calendar-print-root .trip-bar {
+  font-size: 9px !important;
 }
 
 body.calendar-printing #calendar-print-root .bar-resize-handle {
@@ -2321,9 +2345,9 @@ body.calendar-printing #calendar-print-root .bar-resize-handle {
     padding: 0 !important;
     box-shadow: none !important;
     border: 1px solid #ccc !important;
-    height: auto !important;
-    min-height: 0 !important;
-    overflow: visible !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+    overflow: hidden !important;
     break-after: page !important;
     page-break-after: always !important;
     break-inside: avoid !important;
@@ -2341,20 +2365,44 @@ body.calendar-printing #calendar-print-root .bar-resize-handle {
   }
 
   #calendar-print-root .month-header,
-  #calendar-print-root .week-header {
+  #calendar-print-root .week-header,
+  #calendar-print-root .team-person-header,
+  #calendar-print-root .vacation-person-header {
     flex-shrink: 0 !important;
   }
 
   #calendar-print-root .week-row {
-    flex: 1 !important;
+    flex: 1 1 0 !important;
     min-height: 0 !important;
     height: auto !important;
     position: relative !important;
   }
 
+  #calendar-print-root .month-block.print-multi-person {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
+  #calendar-print-root .month-block.print-multi-person .week-row {
+    flex: 0 0 auto !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  #calendar-print-root .month-block.print-multi-person .week-bars-layer {
+    z-index: 2;
+  }
+
   #calendar-print-root .day-cell {
     height: 100% !important;
     min-height: 0 !important;
+  }
+
+  #calendar-print-root .trip-bar {
+    font-size: 9px !important;
   }
 
   #calendar-print-root .bar-resize-handle {

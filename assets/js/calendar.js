@@ -942,7 +942,7 @@ function buildCapacityBar() {
 
 function buildTeamMonthBlock(year, month) {
   const block = document.createElement("div");
-  block.className = "month-block";
+  block.className = "month-block team-month-block";
   block.id = `month-equipe-${year}-${month}`;
 
   const header = document.createElement("div");
@@ -978,6 +978,7 @@ function buildTeamMonthBlock(year, month) {
   for (const c of colaboradores) {
     // Row per colaborador
     const colHeader = document.createElement("div");
+    colHeader.className = "team-person-header";
     colHeader.style.cssText =
       "padding:4px 8px;background:#f0f4f8;border-top:2px solid var(--c-border);font-size:11px;font-weight:700;color:var(--c-primary);display:flex;align-items:center;gap:6px";
     const siglaEl = document.createElement("span");
@@ -1016,7 +1017,6 @@ function buildTeamWeekRow(
     weekEnd = week[6];
   const weekRow = document.createElement("div");
   weekRow.className = "week-row";
-  weekRow.style.minHeight = "40px";
 
   for (let di = 0; di < 7; di++) {
     const dateStr = week[di];
@@ -1145,6 +1145,9 @@ function buildTeamWeekRow(
     barRow.appendChild(bar);
   }
 
+  const maxLane = laneAssignments.reduce((mx, a) => Math.max(mx, a.lane), -1);
+  weekRow.style.minHeight = computeWeekRowBarHeight(maxLane) + "px";
+
   weekRow.appendChild(barsLayer);
   return weekRow;
 }
@@ -1190,6 +1193,28 @@ function showInFieldModal(start, end) {
 // ============================================================
 // EXPORT / PRESENTATION
 // ============================================================
+function computeWeekRowBarHeight(maxLane, zoom = GlobalCalZoom.value) {
+  return Math.max(52, 20 + (maxLane + 1) * 24 + 4) * zoom;
+}
+
+function prepareMonthBlockForPrint(clone) {
+  const personHeaders = clone.querySelectorAll(
+    ".team-person-header, .vacation-person-header",
+  );
+  const isMultiPerson = personHeaders.length > 1;
+  clone.classList.add(isMultiPerson ? "print-multi-person" : "print-fill-page");
+
+  clone.querySelectorAll(".week-row").forEach((weekRow) => {
+    const laneCount = weekRow.querySelectorAll(".week-bars-layer .week-bar-row").length;
+    const maxLane = Math.max(0, laneCount) - 1;
+    const minH = computeWeekRowBarHeight(maxLane);
+    weekRow.style.setProperty("min-height", minH + "px", "important");
+    weekRow.querySelectorAll(".day-cell").forEach((cell) => {
+      cell.style.removeProperty("height");
+    });
+  });
+}
+
 function getExportBuildBlockFn() {
   if (typeof App !== "undefined" && App.currentView === "ferias")
     return buildVacationMonthBlock;
@@ -1284,6 +1309,7 @@ function executeCalendarPrint(fmt, fromVal, toVal) {
     const clone = block.cloneNode(true);
     clone.removeAttribute("id");
     if (i === 0) clone.classList.add("print-first-month");
+    prepareMonthBlockForPrint(clone);
     printRoot.appendChild(clone);
   });
 
