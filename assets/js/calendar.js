@@ -54,10 +54,25 @@ function renderCalendarPage() {
   main.appendChild(stickyTop);
 
   // Months — hide past months for current year
+  appendCalendarMonths(main, CalState.year, buildMonthBlock);
+
+  page.appendChild(main);
+  container.appendChild(page);
+
+  // Scroll to current month
+  scrollToCurrentMonth();
+}
+
+function getCalendarMonthRange(year) {
   const todayNow = new Date();
   const currentM =
-    CalState.year === todayNow.getFullYear() ? todayNow.getMonth() : 0;
-  const isPastYear = CalState.year < todayNow.getFullYear();
+    year === todayNow.getFullYear() ? todayNow.getMonth() : 0;
+  const isPastYear = year < todayNow.getFullYear();
+  return { currentM, isPastYear };
+}
+
+function appendCalendarMonths(main, year, buildBlockFn) {
+  const { currentM, isPastYear } = getCalendarMonthRange(year);
 
   if (currentM > 0 && !isPastYear) {
     const pastSec = document.createElement("div");
@@ -68,7 +83,7 @@ function renderCalendarPage() {
     const pastContainer = document.createElement("div");
     pastContainer.style.display = "none";
     for (let m = 0; m < currentM; m++)
-      pastContainer.appendChild(buildMonthBlock(CalState.year, m));
+      pastContainer.appendChild(buildBlockFn(year, m));
     pastBtn.onclick = () => {
       const open = pastContainer.style.display !== "none";
       pastContainer.style.display = open ? "none" : "block";
@@ -81,14 +96,30 @@ function renderCalendarPage() {
   }
 
   for (let m = isPastYear ? 0 : currentM; m < 12; m++) {
-    main.appendChild(buildMonthBlock(CalState.year, m));
+    main.appendChild(buildBlockFn(year, m));
   }
+}
 
-  page.appendChild(main);
-  container.appendChild(page);
+function getActiveCalendarYear() {
+  if (typeof App !== "undefined" && App.currentView === "ferias")
+    return VacState.year;
+  return CalState.year;
+}
 
-  // Scroll to current month
-  scrollToCurrentMonth();
+function getExportDefaultPeriod(year) {
+  const { currentM, isPastYear } = getCalendarMonthRange(year);
+  const startM = isPastYear ? 1 : currentM + 1;
+  return {
+    from: `${year}-${String(startM).padStart(2, "0")}`,
+    to: `${year}-12`,
+  };
+}
+
+function getMonthBlockPrefix() {
+  if (typeof App !== "undefined" && App.currentView === "ferias")
+    return "month-ferias";
+  if (CalState.mode === "equipe") return "month-equipe";
+  return "month";
 }
 
 // ============================================================
@@ -803,16 +834,8 @@ function getCalScrollContainer() {
 }
 
 function scrollToMonth(m) {
-  const prefix =
-    CalState.mode === "equipe"
-      ? "month-equipe"
-      : CalState.mode === "ferias"
-        ? "month-ferias"
-        : "month";
-  const year =
-    typeof App !== "undefined" && App.currentView === "ferias"
-      ? VacState.year
-      : CalState.year;
+  const prefix = getMonthBlockPrefix();
+  const year = getActiveCalendarYear();
   const el = document.getElementById(`${prefix}-${year}-${m}`);
   const container = getCalScrollContainer();
   if (!el || !container) return;
@@ -831,7 +854,9 @@ function scrollToMonth(m) {
 }
 
 function applyZoom() {
-  if (CalState.mode === "equipe") {
+  if (typeof App !== "undefined" && App.currentView === "ferias") {
+    renderVacationPage();
+  } else if (CalState.mode === "equipe") {
     renderTeamCalendarPage();
   } else {
     renderCalendarPage();
@@ -866,36 +891,7 @@ function renderTeamCalendarPage() {
   stickyTop.appendChild(buildCalHeaderBar());
   main.appendChild(stickyTop);
 
-  // Months — hide past months for current year
-  const todayTeam = new Date();
-  const currentMTeam =
-    CalState.year === todayTeam.getFullYear() ? todayTeam.getMonth() : 0;
-  const isPastYearTeam = CalState.year < todayTeam.getFullYear();
-
-  if (currentMTeam > 0 && !isPastYearTeam) {
-    const pastSec = document.createElement("div");
-    pastSec.className = "past-months-section";
-    const pastBtn = document.createElement("button");
-    pastBtn.className = "past-months-toggle";
-    pastBtn.textContent = `▼ Ver ${currentMTeam} ${currentMTeam === 1 ? "mês anterior" : "meses anteriores"} (${MONTHS_PT[0]} – ${MONTHS_PT[currentMTeam - 1]})`;
-    const pastContainer = document.createElement("div");
-    pastContainer.style.display = "none";
-    for (let m = 0; m < currentMTeam; m++)
-      pastContainer.appendChild(buildTeamMonthBlock(CalState.year, m));
-    pastBtn.onclick = () => {
-      const open = pastContainer.style.display !== "none";
-      pastContainer.style.display = open ? "none" : "block";
-      pastBtn.textContent = open
-        ? `▼ Ver ${currentMTeam} ${currentMTeam === 1 ? "mês anterior" : "meses anteriores"} (${MONTHS_PT[0]} – ${MONTHS_PT[currentMTeam - 1]})`
-        : `▲ Ocultar meses anteriores`;
-    };
-    pastSec.append(pastBtn, pastContainer);
-    main.appendChild(pastSec);
-  }
-
-  for (let m = isPastYearTeam ? 0 : currentMTeam; m < 12; m++) {
-    main.appendChild(buildTeamMonthBlock(CalState.year, m));
-  }
+  appendCalendarMonths(main, CalState.year, buildTeamMonthBlock);
 
   page.appendChild(main);
   container.appendChild(page);
@@ -1194,7 +1190,134 @@ function showInFieldModal(start, end) {
 // ============================================================
 // EXPORT / PRESENTATION
 // ============================================================
+function getExportBuildBlockFn() {
+  if (typeof App !== "undefined" && App.currentView === "ferias")
+    return buildVacationMonthBlock;
+  if (CalState.mode === "equipe") return buildTeamMonthBlock;
+  return buildMonthBlock;
+}
+
+function ensureExportMonthsInDom(fromVal, toVal) {
+  const container = getCalScrollContainer();
+  if (!container || !fromVal || !toVal) return [];
+
+  const buildBlockFn = getExportBuildBlockFn();
+  const prefix = getMonthBlockPrefix();
+  const injected = [];
+
+  let [y, m] = fromVal.split("-").map(Number);
+  const [toY, toM] = toVal.split("-").map(Number);
+  const endKey = toY * 100 + toM;
+
+  while (y * 100 + m <= endKey) {
+    const id = `${prefix}-${y}-${m - 1}`;
+    if (!document.getElementById(id)) {
+      const block = buildBlockFn(y, m - 1);
+      block.classList.add("print-injected");
+      container.appendChild(block);
+      injected.push(block);
+    }
+    m++;
+    if (m > 12) {
+      m = 1;
+      y++;
+    }
+  }
+
+  return injected;
+}
+
+function collectMonthBlocksForPrint(fromVal, toVal) {
+  const container = getCalScrollContainer();
+  if (!container || !fromVal || !toVal) {
+    return { blocks: [], injected: [] };
+  }
+
+  // getElementById finds months inside collapsed past-months — no need to expand
+  const injected = ensureExportMonthsInDom(fromVal, toVal);
+
+  const prefix = getMonthBlockPrefix();
+  const blocks = [];
+  let [y, m] = fromVal.split("-").map(Number);
+  const [toY, toM] = toVal.split("-").map(Number);
+  const endKey = toY * 100 + toM;
+
+  while (y * 100 + m <= endKey) {
+    const el = document.getElementById(`${prefix}-${y}-${m - 1}`);
+    if (el) blocks.push(el);
+    m++;
+    if (m > 12) {
+      m = 1;
+      y++;
+    }
+  }
+
+  return { blocks, injected };
+}
+
+function executeCalendarPrint(fmt, fromVal, toVal) {
+  if (!fromVal || !toVal) {
+    showToast("Preencha o período De/Até.", "error");
+    return;
+  }
+
+  let styleEl = document.getElementById("print-page-style");
+  if (!styleEl) {
+    styleEl = document.createElement("style");
+    styleEl.id = "print-page-style";
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = `@media print { @page { size: ${fmt} landscape; margin: 8mm; } }`;
+
+  const { blocks, injected } = collectMonthBlocksForPrint(fromVal, toVal);
+
+  if (!blocks.length) {
+    injected.forEach((el) => el.remove());
+    showToast("Nenhum mês encontrado no período selecionado.", "error");
+    return;
+  }
+
+  const printRoot = document.createElement("div");
+  printRoot.id = "calendar-print-root";
+
+  blocks.forEach((block, i) => {
+    const clone = block.cloneNode(true);
+    clone.removeAttribute("id");
+    if (i === 0) clone.classList.add("print-first-month");
+    printRoot.appendChild(clone);
+  });
+
+  const hiddenEls = [];
+  for (const id of ["app-header", "app-main", "confirm-overlay", "fab-disponivel", "detail-panel", "search-overlay"]) {
+    const el = document.getElementById(id);
+    if (el) {
+      hiddenEls.push({ el, prev: el.style.display });
+      el.style.display = "none";
+    }
+  }
+
+  document.body.appendChild(printRoot);
+  document.body.classList.add("calendar-printing");
+
+  const cleanup = () => {
+    printRoot.remove();
+    document.body.classList.remove("calendar-printing");
+    hiddenEls.forEach(({ el, prev }) => {
+      el.style.display = prev;
+    });
+    injected.forEach((el) => el.remove());
+    window.removeEventListener("afterprint", cleanup);
+  };
+
+  window.addEventListener("afterprint", cleanup);
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => window.print());
+  });
+}
+
 function openExportModal() {
+  const year = getActiveCalendarYear();
+  const defaults = getExportDefaultPeriod(year);
   const body = `
     <div class="form-row" style="margin-bottom:4px">
       <div class="form-group narrow">
@@ -1208,11 +1331,11 @@ function openExportModal() {
     <div class="form-row" style="margin-bottom:4px">
       <div class="form-group">
         <label class="form-label">De (mês/ano)</label>
-        <input type="month" class="form-control" id="exp-from" value="${CalState.year}-01">
+        <input type="month" class="form-control" id="exp-from" value="${defaults.from}">
       </div>
       <div class="form-group">
         <label class="form-label">Até (mês/ano)</label>
-        <input type="month" class="form-control" id="exp-to" value="${CalState.year}-12">
+        <input type="month" class="form-control" id="exp-to" value="${defaults.to}">
       </div>
     </div>
     <div class="settings-row" style="padding:8px 0">
@@ -1225,68 +1348,9 @@ function openExportModal() {
     body,
     () => {
       const fmt = document.getElementById("exp-format")?.value || "A4";
-      const fromVal = document.getElementById("exp-from")?.value; // 'YYYY-MM'
-      const toVal = document.getElementById("exp-to")?.value; // 'YYYY-MM'
-
-      // 1. Apply selected paper format
-      let styleEl = document.getElementById("print-page-style");
-      if (!styleEl) {
-        styleEl = document.createElement("style");
-        styleEl.id = "print-page-style";
-        document.head.appendChild(styleEl);
-      }
-      styleEl.textContent = `@media print { @page { size: ${fmt} landscape; margin: 8mm; } }`;
-
-      // 2. Force-show past-months containers so all months are in the DOM
-      const forcedContainers = [];
-      document.querySelectorAll(".past-months-section > div").forEach((el) => {
-        if (el.style.display === "none" || el.style.display === "") {
-          forcedContainers.push({ el, prev: el.style.display });
-          el.style.display = "block";
-        }
-      });
-
-      // 3. Period filter: mark month blocks outside De/Até as excluded
-      const excludedBlocks = [];
-      if (fromVal && toVal) {
-        const [fromY, fromM] = fromVal.split("-").map(Number);
-        const [toY, toM] = toVal.split("-").map(Number);
-        document.querySelectorAll(".month-block").forEach((el) => {
-          // IDs: month-YYYY-M  or  month-equipe-YYYY-M  (month index is 0-based)
-          const match = el.id.match(/month(?:-equipe)?-(\d{4})-(\d+)/);
-          if (!match) return;
-          const bDate = +match[1] * 100 + (+match[2] + 1); // 1-based month
-          const fDate = fromY * 100 + fromM;
-          const tDate = toY * 100 + toM;
-          if (bDate < fDate || bDate > tDate) {
-            el.classList.add("print-exclude");
-            excludedBlocks.push(el);
-          }
-        });
-      }
-
-      // 4. Mark first non-excluded month to suppress the page-break-before
-      document
-        .querySelectorAll(".print-first-month")
-        .forEach((el) => el.classList.remove("print-first-month"));
-      const firstVisible = document.querySelector(
-        ".month-block:not(.print-exclude)",
-      );
-      if (firstVisible) firstVisible.classList.add("print-first-month");
-
-      // 5. Print; clean up after the dialog closes
-      const cleanup = () => {
-        forcedContainers.forEach(({ el, prev }) => {
-          el.style.display = prev;
-        });
-        excludedBlocks.forEach((el) => el.classList.remove("print-exclude"));
-        document
-          .querySelectorAll(".print-first-month")
-          .forEach((el) => el.classList.remove("print-first-month"));
-        window.removeEventListener("afterprint", cleanup);
-      };
-      window.addEventListener("afterprint", cleanup);
-      setTimeout(() => window.print(), 80);
+      const fromVal = document.getElementById("exp-from")?.value;
+      const toVal = document.getElementById("exp-to")?.value;
+      executeCalendarPrint(fmt, fromVal, toVal);
     },
     "Imprimir",
     "Cancelar",

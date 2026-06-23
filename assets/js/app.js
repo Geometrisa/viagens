@@ -757,8 +757,8 @@ function openConfirm(
   }
 
   confirmBtn.onclick = () => {
-    overlay.classList.add("hidden");
     if (onConfirm) onConfirm();
+    overlay.classList.add("hidden");
   };
   cancelBtn.onclick = () => {
     overlay.classList.add("hidden");
@@ -779,8 +779,8 @@ function openConfirm(
     if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
       e.preventDefault();
       document.removeEventListener("keydown", onKey);
-      overlay.classList.add("hidden");
       if (onConfirm) onConfirm();
+      overlay.classList.add("hidden");
     }
   };
   // Delay slightly so the keydown that opened this dialog doesn't immediately confirm it

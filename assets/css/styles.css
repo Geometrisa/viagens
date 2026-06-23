@@ -2230,10 +2230,151 @@ body.presentation-mode .presentation-exit {
 /* ============================================================
    PRINT
    ============================================================ */
+
+/* Dedicated print root — bypasses app layout clipping */
+body.calendar-printing #app-header,
+body.calendar-printing #app-main,
+body.calendar-printing #confirm-overlay,
+body.calendar-printing #fab-disponivel,
+body.calendar-printing #detail-panel,
+body.calendar-printing #search-overlay {
+  display: none !important;
+}
+
+body.calendar-printing #calendar-print-root {
+  display: block !important;
+  width: 100%;
+  background: #fff;
+}
+
+body.calendar-printing #calendar-print-root .month-block {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  border: 1px solid #ccc !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  break-after: page;
+  page-break-after: always;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+body.calendar-printing #calendar-print-root .month-block.print-first-month {
+  break-before: auto !important;
+  page-break-before: auto !important;
+}
+
+body.calendar-printing #calendar-print-root .month-block:last-child {
+  break-after: auto !important;
+  page-break-after: auto !important;
+}
+
+body.calendar-printing #calendar-print-root .month-header,
+body.calendar-printing #calendar-print-root .week-header {
+  flex-shrink: 0 !important;
+}
+
+body.calendar-printing #calendar-print-root .week-row {
+  flex: 1 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  position: relative !important;
+}
+
+body.calendar-printing #calendar-print-root .day-cell {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+body.calendar-printing #calendar-print-root .bar-resize-handle {
+  display: none !important;
+}
+
 @media print {
   @page {
     margin: 8mm;
     size: A4 landscape;
+  }
+
+  body.calendar-printing > *:not(#calendar-print-root) {
+    display: none !important;
+  }
+
+  #calendar-print-root {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  #calendar-print-root .month-block {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: 1px solid #ccc !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    break-after: page !important;
+    page-break-after: always !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  #calendar-print-root .month-block.print-first-month {
+    break-before: auto !important;
+    page-break-before: auto !important;
+  }
+
+  #calendar-print-root .month-block:last-child {
+    break-after: auto !important;
+    page-break-after: auto !important;
+  }
+
+  #calendar-print-root .month-header,
+  #calendar-print-root .week-header {
+    flex-shrink: 0 !important;
+  }
+
+  #calendar-print-root .week-row {
+    flex: 1 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    position: relative !important;
+  }
+
+  #calendar-print-root .day-cell {
+    height: 100% !important;
+    min-height: 0 !important;
+  }
+
+  #calendar-print-root .bar-resize-handle {
+    display: none !important;
+  }
+
+  /* When using dedicated print root, never print the live app shell */
+  body.calendar-printing #app-main,
+  body.calendar-printing #app-header,
+  body.calendar-printing #confirm-overlay,
+  body.calendar-printing #fab-disponivel,
+  body.calendar-printing #detail-panel,
+  body.calendar-printing #search-overlay,
+  body.calendar-printing .auth-screen {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  body.calendar-printing .past-months-section {
+    display: none !important;
   }
 
   /* Hide chrome */
@@ -2253,18 +2394,37 @@ body.presentation-mode .presentation-exit {
     display: none !important;
   }
 
-  /* Show the hidden past-months container so all months print */
-  .past-months-section {
+  /* Show the hidden past-months container so all months print (legacy path only) */
+  body:not(.calendar-printing) .past-months-section {
     margin: 0 !important;
   }
-  .past-months-section > div {
+  body:not(.calendar-printing) .past-months-section > div {
     display: block !important;
   }
 
   #app-main {
     margin: 0 !important;
     padding: 0 !important;
+    min-height: 0 !important;
+    overflow: visible !important;
   }
+
+  body,
+  body:has(#view-calendar-viagens.active),
+  body:has(#view-calendar-equipe.active),
+  body:has(#view-ferias.active) {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  #view-calendar-viagens.active,
+  #view-calendar-equipe.active,
+  #view-ferias.active,
+  .view.active {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
   .calendar-page {
     display: block !important;
     overflow: visible !important;

@@ -5,7 +5,6 @@
 // ============================================================
 const VacState = {
   year: new Date().getFullYear(),
-  month: new Date().getMonth(),
   filters: { colaboradores: [] },
 };
 
@@ -33,9 +32,13 @@ function renderVacationPage() {
       <h2 class="vacation-title">Férias da Equipe</h2>
       <p class="vacation-subtitle">Visão mensal — estilo calendário de equipe</p>
     </div>
-    <button class="btn btn-primary btn-sm" id="vac-add-btn">+ Registrar férias</button>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button class="btn btn-outline btn-sm" id="vac-export-btn">⬇ Exportar PDF</button>
+      <button class="btn btn-primary btn-sm" id="vac-add-btn">+ Registrar férias</button>
+    </div>
   `;
   header.querySelector("#vac-add-btn").onclick = () => openFeriasModal();
+  header.querySelector("#vac-export-btn").onclick = () => openExportModal();
 
   const stickyTop = document.createElement("div");
   stickyTop.className = "cal-sticky-top";
@@ -43,10 +46,11 @@ function renderVacationPage() {
   stickyTop.appendChild(buildVacationFilterBar());
   main.appendChild(stickyTop);
 
-  main.appendChild(buildVacationMonthBlock(VacState.year, VacState.month));
+  appendCalendarMonths(main, VacState.year, buildVacationMonthBlock);
 
   page.appendChild(main);
   container.appendChild(page);
+  scrollToCurrentMonth();
 }
 
 function buildVacationSidebar() {
@@ -63,48 +67,67 @@ function buildVacationSidebar() {
   const prevBtn = document.createElement("button");
   prevBtn.textContent = "◀";
   prevBtn.onclick = () => {
-    if (VacState.month === 0) {
-      if (VacState.year > minYear) {
-        VacState.year--;
-        VacState.month = 11;
-        renderVacationPage();
-      }
-    } else {
-      VacState.month--;
+    if (VacState.year > minYear) {
+      VacState.year--;
       renderVacationPage();
     }
   };
 
-  const label = document.createElement("span");
-  label.style.cssText = "font-size:12px;font-weight:700;color:var(--c-primary)";
-  label.textContent = `${MONTHS_SHORT[VacState.month]} ${VacState.year}`;
+  const sel = document.createElement("select");
+  for (let y = minYear; y <= maxYear; y++) {
+    const o = document.createElement("option");
+    o.value = y;
+    o.textContent = y;
+    if (y === VacState.year) o.selected = true;
+    sel.appendChild(o);
+  }
+  sel.onchange = () => {
+    VacState.year = +sel.value;
+    renderVacationPage();
+  };
 
   const nextBtn = document.createElement("button");
   nextBtn.textContent = "▶";
   nextBtn.onclick = () => {
-    if (VacState.month === 11) {
-      if (VacState.year < maxYear) {
-        VacState.year++;
-        VacState.month = 0;
-        renderVacationPage();
-      }
-    } else {
-      VacState.month++;
+    if (VacState.year < maxYear) {
+      VacState.year++;
       renderVacationPage();
     }
   };
 
-  yearRow.append(prevBtn, label, nextBtn);
+  yearRow.append(prevBtn, sel, nextBtn);
   sidebar.appendChild(yearRow);
+
+  const zoomRow = document.createElement("div");
+  zoomRow.style.cssText =
+    "display:flex;align-items:center;gap:4px;padding:6px 10px;border-bottom:1px solid var(--c-border)";
+  const zm = document.createElement("span");
+  zm.style.cssText = "font-size:10px;color:#888;flex:1";
+  zm.textContent = "Zoom";
+  const zIn = document.createElement("button");
+  zIn.className = "cal-zoom-btn";
+  zIn.textContent = "+";
+  zIn.onclick = () => {
+    GlobalCalZoom.value = Math.min(1.5, GlobalCalZoom.value + 0.15);
+    applyZoom();
+  };
+  const zOut = document.createElement("button");
+  zOut.className = "cal-zoom-btn";
+  zOut.textContent = "−";
+  zOut.onclick = () => {
+    GlobalCalZoom.value = Math.max(0.6, GlobalCalZoom.value - 0.15);
+    applyZoom();
+  };
+  zoomRow.append(zm, zOut, zIn);
+  sidebar.appendChild(zoomRow);
 
   const todayBtn = document.createElement("button");
   todayBtn.className = "cal-sidebar-today";
   todayBtn.textContent = "📅 Ir para Hoje";
   todayBtn.onclick = () => {
-    const now = new Date();
-    VacState.year = now.getFullYear();
-    VacState.month = now.getMonth();
+    VacState.year = new Date().getFullYear();
     renderVacationPage();
+    setTimeout(scrollToCurrentMonth, 50);
   };
   sidebar.appendChild(todayBtn);
 
@@ -115,12 +138,9 @@ function buildVacationSidebar() {
     if (VacState.year === today.getFullYear() && m === today.getMonth()) {
       link.classList.add("current-month");
     }
-    if (m === VacState.month) link.classList.add("active-month");
     link.textContent = MONTHS_PT[m];
-    link.onclick = () => {
-      VacState.month = m;
-      renderVacationPage();
-    };
+    link.dataset.month = m;
+    link.onclick = () => scrollToMonth(m);
     sidebar.appendChild(link);
   }
 
@@ -134,8 +154,6 @@ function buildVacationFilterBar() {
 
   const filtersDiv = document.createElement("div");
   filtersDiv.className = "cal-filters";
-  filtersDiv.style.cssText =
-    "position:relative;z-index:auto;padding:0;flex:1;flex-wrap:wrap";
 
   const label = document.createElement("span");
   label.className = "cal-filters-label";
@@ -238,7 +256,9 @@ function buildVacationMonthBlock(year, month) {
   if (!colaboradores.length) {
     const empty = document.createElement("p");
     empty.style.cssText = "padding:16px;color:#888;font-size:13px";
-    empty.textContent = "Nenhum colaborador ativo cadastrado.";
+    empty.textContent = VacState.filters.colaboradores.length
+      ? "Nenhum colaborador corresponde ao filtro selecionado."
+      : "Nenhum colaborador ativo cadastrado.";
     block.appendChild(empty);
     return block;
   }
